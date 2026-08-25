@@ -1,7 +1,6 @@
 import streamlit as st
 import tempfile
 import math
-import textwrap
 from pathlib import Path
 from dataclasses import is_dataclass, asdict
 
@@ -23,129 +22,123 @@ st.set_page_config(
 # CUSTOM CSS
 # ============================================================
 
-st.markdown(
-    textwrap.dedent("""
-    <style>
-        html, body, [data-testid="stAppViewContainer"] {
-            background-color: #F3F5F8 !important;
-            color: #16233E !important;
-        }
+st.markdown("""
+<style>
+    html, body, [data-testid="stAppViewContainer"] {
+        background-color: #F3F5F8 !important;
+        color: #16233E !important;
+    }
 
-        h1, h2, h3 {
-            font-family: 'Space Grotesk', sans-serif !important;
-        }
+    h1, h2, h3 {
+        font-family: 'Space Grotesk', sans-serif !important;
+    }
 
-        .header-box {
-            background-color: #16233E;
-            background-image:
-                linear-gradient(
-                    rgba(255,255,255,0.04) 1px,
-                    transparent 1px
-                ),
-                linear-gradient(
-                    90deg,
-                    rgba(255,255,255,0.04) 1px,
-                    transparent 1px
-                );
-            background-size: 20px 20px;
-            padding: 30px;
-            border-radius: 14px;
-            color: #FFFFFF;
-            margin-bottom: 25px;
-        }
+    .header-box {
+        background-color: #16233E;
+        background-image:
+            linear-gradient(
+                rgba(255,255,255,0.04) 1px,
+                transparent 1px
+            ),
+            linear-gradient(
+                90deg,
+                rgba(255,255,255,0.04) 1px,
+                transparent 1px
+            );
+        background-size: 20px 20px;
+        padding: 30px;
+        border-radius: 14px;
+        color: #FFFFFF;
+        margin-bottom: 25px;
+    }
 
-        .badge-base {
-            display: inline-block;
-            padding: 4px 12px;
-            border-radius: 20px;
-            font-size: 11px;
-            font-weight: 700;
-            text-transform: uppercase;
-        }
+    .badge-base {
+        display: inline-block;
+        padding: 4px 12px;
+        border-radius: 20px;
+        font-size: 11px;
+        font-weight: 700;
+        text-transform: uppercase;
+    }
 
-        .badge-retain {
-            background-color: #E3F3EA;
-            color: #2F8F5B;
-        }
+    .badge-retain {
+        background-color: #E3F3EA;
+        color: #2F8F5B;
+    }
 
-        .badge-review {
-            background-color: #FBF0DE;
-            color: #C9862B;
-        }
+    .badge-review {
+        background-color: #FBF0DE;
+        color: #C9862B;
+    }
 
-        .badge-revise {
-            background-color: #FAEAE2;
-            color: #BD5B34;
-        }
+    .badge-revise {
+        background-color: #FAEAE2;
+        color: #BD5B34;
+    }
 
-        .badge-discard {
-            background-color: #FAE7E5;
-            color: #B23A32;
-        }
+    .badge-discard {
+        background-color: #FAE7E5;
+        color: #B23A32;
+    }
 
-        .dist-container {
-            display: flex;
-            width: 100%;
-            height: 26px;
-            border-radius: 6px;
-            overflow: hidden;
-            margin: 10px 0;
-            border: 1px solid #DEE4EF;
-        }
+    .dist-container {
+        display: flex;
+        width: 100%;
+        height: 26px;
+        border-radius: 6px;
+        overflow: hidden;
+        margin: 10px 0;
+        border: 1px solid #DEE4EF;
+    }
 
-        .dist-segment {
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            color: white;
-            font-family: monospace;
-            font-size: 11px;
-            font-weight: bold;
-        }
-    </style>
-    """),
-    unsafe_allow_html=True
-)
+    .dist-segment {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        color: white;
+        font-family: monospace;
+        font-size: 11px;
+        font-weight: bold;
+    }
+</style>
+""", unsafe_allow_html=True)
 
 
 # ============================================================
 # HEADER
 # ============================================================
 
-st.markdown(
-    textwrap.dedent("""
-    <div class="header-box">
+st.html("""
+<div class="header-box">
 
-        <div style="
-            font-family: monospace;
-            font-size: 11px;
-            letter-spacing: 0.1em;
-            color: #AFC3DC;
-            text-transform: uppercase;
-        ">
-            🎯 ITEM ANALYSIS INSTRUMENT
-        </div>
-
-        <h1 style="
-            color: white;
-            margin: 5px 0;
-        ">
-            Diagnose your assessment, question by question
-        </h1>
-
-        <p style="
-            color: #C5D2E6;
-            font-size: 14px;
-            margin-bottom: 0;
-        ">
-            Upload an answer key and student responses to calculate
-            difficulty, discrimination, and distractor readouts for every item.
-        </p>
-
+    <div style="
+        font-family: monospace;
+        font-size: 11px;
+        letter-spacing: 0.1em;
+        color: #AFC3DC;
+        text-transform: uppercase;
+    ">
+        🎯 ITEM ANALYSIS INSTRUMENT
     </div>
-    """),
-    unsafe_allow_html=True
-)
+
+    <h1 style="
+        color: white;
+        margin: 5px 0;
+    ">
+        Diagnose your assessment, question by question
+    </h1>
+
+    <p style="
+        color: #C5D2E6;
+        font-size: 14px;
+        margin-bottom: 0;
+    ">
+        Upload an answer key and student responses to calculate
+        difficulty, discrimination, and distractor readouts for every item.
+    </p>
+
+</div>
+""")
 
 
 # ============================================================
