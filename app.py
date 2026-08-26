@@ -1,11 +1,9 @@
 import streamlit as st
 import tempfile
 import math
-
 from pathlib import Path
 from dataclasses import is_dataclass, asdict
-
-import pandas as pd
+from enum import Enum
 
 from item_analyzer import ItemAnalyzer
 
