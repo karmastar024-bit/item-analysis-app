@@ -1,8 +1,6 @@
 import streamlit as st
 import tempfile
 import math
-import io
-import pandas as pd
 from pathlib import Path
 from dataclasses import is_dataclass, asdict
 
@@ -24,89 +22,125 @@ st.set_page_config(
 # CUSTOM CSS
 # ============================================================
 
-st.markdown(
-    textwrap.dedent("""
-    <style>
-        html, body, [data-testid="stAppViewContainer"] {
-            background-color: #F3F5F8 !important;
-            color: #16233E !important;
-        }
+st.markdown("""
+<style>
+    html, body, [data-testid="stAppViewContainer"] {
+        background-color: #F3F5F8 !important;
+        color: #16233E !important;
+    }
 
-        h1, h2, h3 {
-            font-family: 'Space Grotesk', sans-serif !important;
-        }
+    h1, h2, h3 {
+        font-family: 'Space Grotesk', sans-serif !important;
+    }
 
-        .header-box {
-            background-color: #16233E;
-            background-image:
-                linear-gradient(
-                    rgba(255,255,255,0.04) 1px,
-                    transparent 1px
-                ),
-                linear-gradient(
-                    90deg,
-                    rgba(255,255,255,0.04) 1px,
-                    transparent 1px
-                );
-            background-size: 20px 20px;
-            padding: 30px;
-            border-radius: 14px;
-            color: #FFFFFF;
-            margin-bottom: 25px;
-        }
+    .header-box {
+        background-color: #16233E;
+        background-image:
+            linear-gradient(
+                rgba(255,255,255,0.04) 1px,
+                transparent 1px
+            ),
+            linear-gradient(
+                90deg,
+                rgba(255,255,255,0.04) 1px,
+                transparent 1px
+            );
+        background-size: 20px 20px;
+        padding: 30px;
+        border-radius: 14px;
+        color: #FFFFFF;
+        margin-bottom: 25px;
+    }
 
-        .badge-base {
-            display: inline-block;
-            padding: 4px 12px;
-            border-radius: 20px;
-            font-size: 11px;
-            font-weight: 700;
-            text-transform: uppercase;
-        }
+    .badge-base {
+        display: inline-block;
+        padding: 4px 12px;
+        border-radius: 20px;
+        font-size: 11px;
+        font-weight: 700;
+        text-transform: uppercase;
+    }
 
-        .badge-retain {
-            background-color: #E3F3EA;
-            color: #2F8F5B;
-        }
+    .badge-retain {
+        background-color: #E3F3EA;
+        color: #2F8F5B;
+    }
 
-        .badge-review {
-            background-color: #FBF0DE;
-            color: #C9862B;
-        }
+    .badge-review {
+        background-color: #FBF0DE;
+        color: #C9862B;
+    }
 
-        .badge-revise {
-            background-color: #FAEAE2;
-            color: #BD5B34;
-        }
+    .badge-revise {
+        background-color: #FAEAE2;
+        color: #BD5B34;
+    }
 
-        .badge-discard {
-            background-color: #FAE7E5;
-            color: #B23A32;
-        }
+    .badge-discard {
+        background-color: #FAE7E5;
+        color: #B23A32;
+    }
 
-        .dist-container {
-            display: flex;
-            width: 100%;
-            height: 26px;
-            border-radius: 6px;
-            overflow: hidden;
-            margin: 10px 0;
-            border: 1px solid #DEE4EF;
-        }
+    .dist-container {
+        display: flex;
+        width: 100%;
+        height: 26px;
+        border-radius: 6px;
+        overflow: hidden;
+        margin: 10px 0;
+        border: 1px solid #DEE4EF;
+    }
 
-        .dist-segment {
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            color: white;
-            font-family: monospace;
-            font-size: 11px;
-            font-weight: bold;
-        }
-    </style>
-    """),
-    unsafe_allow_html=True
-)
+    .dist-segment {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        color: white;
+        font-family: monospace;
+        font-size: 11px;
+        font-weight: bold;
+    }
+</style>
+""", unsafe_allow_html=True)
+
+
+# ============================================================
+# HEADER
+# Uses st.html() so HTML is rendered rather than displayed
+# as literal Markdown/code.
+# ============================================================
+
+st.html("""
+<div class="header-box">
+
+    <div style="
+        font-family: monospace;
+        font-size: 11px;
+        letter-spacing: 0.1em;
+        color: #AFC3DC;
+        text-transform: uppercase;
+    ">
+        🎯 ITEM ANALYSIS INSTRUMENT
+    </div>
+
+    <h1 style="
+        color: white;
+        margin: 5px 0;
+    ">
+        Diagnose your assessment, question by question
+    </h1>
+
+    <p style="
+        color: #C5D2E6;
+        font-size: 14px;
+        margin-bottom: 0;
+    ">
+        Upload an answer key and student responses to calculate
+        difficulty, discrimination, and distractor readouts for every item.
+    </p>
+
+</div>
+""")
 
 
 # ============================================================
@@ -137,16 +171,18 @@ with col_data:
 def get_status_class(status, block_type="diff"):
     if status in ["Ideal", "Good"]:
         return "good"
+
     if status in ["Too Easy", "Poor"]:
         return "mid"
+
     return "poor"
 
 
 def sanitize(data):
     """
-    Convert ItemStats/dataclass objects to dictionaries,
-    recursively sanitize nested structures, and replace
-    NaN/Infinity with 0.0.
+    Convert dataclass objects such as ItemStats into dictionaries,
+    recursively sanitize nested structures, and replace NaN/Infinity
+    with 0.0.
     """
 
     # Dataclass objects such as ItemStats
@@ -185,127 +221,12 @@ def sanitize(data):
 def get_value(obj, key, default=None):
     """
     Safely retrieve a value from dictionaries or objects.
-
-    This provides extra compatibility if ItemAnalyzer returns
-    regular objects instead of dictionaries/dataclasses.
     """
 
     if isinstance(obj, dict):
         return obj.get(key, default)
 
     return getattr(obj, key, default)
-
-
-# ============================================================
-# EXCEL REPORT GENERATOR
-# ============================================================
-
-def create_excel_report(results):
-    """Create a downloadable Excel report from the analysis results."""
-    output = io.BytesIO()
-
-    summary = results.get("summary", {})
-    items = results.get("items", [])
-    students = results.get("students", [])
-
-    with pd.ExcelWriter(output, engine="openpyxl") as writer:
-        # Summary
-        summary_df = pd.DataFrame({
-            "Metric": [
-                "Total Students",
-                "Total Questions",
-                "Mean Score",
-                "Standard Deviation",
-                "Minimum Score",
-                "Maximum Score",
-                "Mean Percentage",
-                "Pass Rate"
-            ],
-            "Value": [
-                summary.get("total_students", 0),
-                summary.get("total_questions", 0),
-                summary.get("mean_score", 0),
-                summary.get("std_score", 0),
-                summary.get("min_score", 0),
-                summary.get("max_score", 0),
-                summary.get("mean_percentage", 0),
-                summary.get("pass_rate", 0)
-            ]
-        })
-        summary_df.to_excel(writer, sheet_name="Summary", index=False)
-
-        # Item analysis
-        item_rows = []
-        for item in items:
-            rec = item.get("recommendation", "")
-            item_rows.append({
-                "Question": item.get("question", ""),
-                "Correct Count": item.get("correct_count", 0),
-                "Total Students": item.get("total_students", 0),
-                "Difficulty Index": item.get("difficulty", 0),
-                "Difficulty Status": item.get("difficulty_status", ""),
-                "Discrimination Index": item.get("discrimination", 0),
-                "Discrimination Status": item.get("discrimination_status", ""),
-                "Distractor Efficiency (%)": item.get("distractor_efficiency", 0),
-                "Non-functional Distractors": ", ".join(
-                    str(x) for x in item.get("non_functional_distractors", [])
-                ),
-                "Omitted Count": item.get("omitted_count", 0),
-                "Omitted (%)": item.get("omitted_percentage", 0),
-                "Recommendation": str(rec)
-            })
-        pd.DataFrame(item_rows).to_excel(writer, sheet_name="Item Analysis", index=False)
-
-        # Distractor analysis
-        distractor_rows = []
-        for item in items:
-            for option in item.get("option_breakdown", []):
-                if option.get("is_correct"):
-                    status = "Correct Answer"
-                elif option.get("is_functional"):
-                    status = "Functional Distractor"
-                else:
-                    status = "Non-functional Distractor"
-                distractor_rows.append({
-                    "Question": item.get("question", ""),
-                    "Option": option.get("option", ""),
-                    "Selection Count": option.get("count", 0),
-                    "Percentage": option.get("percentage", 0),
-                    "Correct Answer": "Yes" if option.get("is_correct") else "No",
-                    "Functional": "Yes" if option.get("is_functional") else "No",
-                    "Status": status
-                })
-        pd.DataFrame(distractor_rows).to_excel(
-            writer, sheet_name="Distractor Analysis", index=False
-        )
-
-        # Student results
-        student_rows = []
-        for student in students:
-            student_rows.append({
-                "Rank": student.get("rank", ""),
-                "Student ID": student.get("student_id", ""),
-                "Name": student.get("name", ""),
-                "Score": student.get("score", 0),
-                "Percentage": student.get("percentage", 0),
-                "Correct Count": student.get("correct_count", 0)
-            })
-        pd.DataFrame(student_rows).to_excel(
-            writer, sheet_name="Student Results", index=False
-        )
-
-        # Formatting
-        for ws in writer.book.worksheets:
-            ws.freeze_panes = "A2"
-            for cell in ws[1]:
-                cell.font = cell.font.copy(bold=True)
-            for column in ws.columns:
-                letter = column[0].column_letter
-                width = max(len(str(cell.value or "")) for cell in column) + 2
-                ws.column_dimensions[letter].width = min(width, 40)
-
-    output.seek(0)
-    return output.getvalue()
 
 
 # ============================================================
@@ -325,7 +246,7 @@ if key_file and data_file:
             try:
 
                 # ----------------------------------------------------
-                # Create temporary files
+                # CREATE TEMPORARY FILES
                 # ----------------------------------------------------
 
                 with tempfile.TemporaryDirectory() as tmp_dir:
@@ -344,7 +265,7 @@ if key_file and data_file:
                     )
 
                     # ------------------------------------------------
-                    # Run analysis engine
+                    # RUN ANALYSIS ENGINE
                     # ------------------------------------------------
 
                     analyzer = ItemAnalyzer()
@@ -355,28 +276,13 @@ if key_file and data_file:
                     )
 
                 # ----------------------------------------------------
-                # Sanitize analyzer output
+                # SANITIZE ANALYZER OUTPUT
                 # ----------------------------------------------------
 
                 results = sanitize(raw_results)
 
                 # ----------------------------------------------------
-                # DOWNLOAD REPORT
-                # ----------------------------------------------------
-                report_data = create_excel_report(results)
-
-                st.success("Analysis completed successfully.")
-                st.markdown("### 📥 Download Analysis Report")
-                st.download_button(
-                    label="📊 Download Complete Item Analysis Report (.xlsx)",
-                    data=report_data,
-                    file_name="Item_Analysis_Report.xlsx",
-                    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-                    use_container_width=True
-                )
-
-                # ----------------------------------------------------
-                # Global summary
+                # GLOBAL SUMMARY
                 # ----------------------------------------------------
 
                 summary = get_value(
@@ -410,7 +316,7 @@ if key_file and data_file:
                     )
 
                 # ----------------------------------------------------
-                # Per-question analysis
+                # PER-QUESTION ANALYSIS
                 # ----------------------------------------------------
 
                 st.markdown("### 🔬 Per-Question Analysis")
@@ -426,9 +332,12 @@ if key_file and data_file:
                     []
                 )
 
-                # Safety check
                 if not isinstance(items, list):
                     items = list(items) if items else []
+
+                # ----------------------------------------------------
+                # QUESTION LOOP
+                # ----------------------------------------------------
 
                 for idx, item in enumerate(items):
 
@@ -449,10 +358,6 @@ if key_file and data_file:
 
                     rec = str(rec).lower()
 
-                    # ------------------------------------------------
-                    # Question card
-                    # ------------------------------------------------
-
                     with st.expander(
                         f"📦 {q_text} — Recommendation: {rec.upper()}"
                     ):
@@ -464,7 +369,7 @@ if key_file and data_file:
                         g_col1, g_col2 = st.columns(2)
 
                         # --------------------------------------------
-                        # Difficulty
+                        # DIFFICULTY
                         # --------------------------------------------
 
                         with g_col1:
@@ -504,7 +409,7 @@ if key_file and data_file:
                             )
 
                         # --------------------------------------------
-                        # Discrimination
+                        # DISCRIMINATION
                         # --------------------------------------------
 
                         with g_col2:
@@ -615,7 +520,7 @@ if key_file and data_file:
                             breakdown = []
 
                         # --------------------------------------------
-                        # Distribution bar
+                        # DISTRIBUTION BAR
                         # --------------------------------------------
 
                         bar_html = '<div class="dist-container">'
@@ -659,8 +564,10 @@ if key_file and data_file:
 
                                 if is_correct:
                                     color = "#2F8F5B"
+
                                 elif is_functional:
                                     color = "#2C5F8A"
+
                                 else:
                                     color = "#B23A32"
 
@@ -682,7 +589,7 @@ if key_file and data_file:
                                 )
 
                         # --------------------------------------------
-                        # Omitted responses
+                        # OMITTED RESPONSES
                         # --------------------------------------------
 
                         omitted_count = get_value(
@@ -758,8 +665,10 @@ if key_file and data_file:
 
                             if is_correct:
                                 role = "✅ Correct Answer"
+
                             elif is_functional:
                                 role = "Distractor OK"
+
                             else:
                                 role = "❌ Non-functional"
 
@@ -800,6 +709,7 @@ if key_file and data_file:
 
                         if grid_data:
                             st.table(grid_data)
+
                         else:
                             st.info(
                                 "No option breakdown data "
@@ -821,6 +731,11 @@ if key_file and data_file:
                     expanded=True
                 ):
                     st.exception(e)
+
+
+# ============================================================
+# FILE UPLOAD REMINDER
+# ============================================================
 
 else:
 
