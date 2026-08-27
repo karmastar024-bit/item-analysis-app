@@ -17,8 +17,8 @@ from item_analyzer import ItemAnalyzer
 # ============================================================
 
 st.set_page_config(
-    page_title="Item Analysis Instrument",
-    page_icon="🎯",
+    page_title="Item Analysis",
+    page_icon="",
     layout="wide",
     initial_sidebar_state="collapsed"
 )
@@ -146,7 +146,7 @@ st.html(
         color: #AFC3DC;
         text-transform: uppercase;
     ">
-        🎯 ITEM ANALYSIS INSTRUMENT
+        ITEM ANALYZER
     </div>
 
     <h1 style="
@@ -790,7 +790,7 @@ with col_data:
 if key_file and data_file:
 
     if st.button(
-        "🚀 Run Analysis Engine",
+        "Run Analysis",
         type="primary",
         use_container_width=True
     ):
@@ -1365,7 +1365,7 @@ if (
             st.markdown("---")
 
             st.markdown(
-                "#### 📊 Response Distribution"
+                "#### Response Distribution"
             )
 
             breakdown = get_value(
@@ -1634,7 +1634,7 @@ if (
     st.markdown("---")
 
     st.markdown(
-        "### 📋 Item Recommendation Summary"
+        "### Item Recommendation Summary"
     )
 
     recommendation_rows = []
