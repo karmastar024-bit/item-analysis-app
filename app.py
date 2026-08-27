@@ -13,7 +13,7 @@ from item_analyzer import ItemAnalyzer
 # ============================================================
 
 st.set_page_config(
-    page_title="Test Result Helper",
+    page_title="Test Analysis",
     page_icon="📘",
     layout="wide",
     initial_sidebar_state="collapsed"
@@ -114,9 +114,10 @@ st.html("""
 <div class="header-box">
     <h1 style="color: white; margin: 0 0 8px 0;">📘 Test Result Helper</h1>
     <p style="color: #D6E3ED; font-size: 15px; margin: 0;">
-        Upload your answer key and your students' answers. This tool tells you,
-        in plain language, which questions worked well and which ones need
-        a second look — no statistics background needed.
+        Item analysis is a systematic process of examining individual test items to determine how well they function in measuring students’ learning. 
+        It typically evaluates the difficulty index, discrimination index, and effectiveness of distractors in multiple-choice questions. 
+        The results help teachers identify items that are too easy, too difficult, or unable to distinguish between high- and low-performing students. 
+        Item analysis therefore supports the improvement of test quality, fairness, reliability, and the validity of assessment results.
     </p>
 </div>
 """)
