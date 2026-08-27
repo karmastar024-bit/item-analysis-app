@@ -1,8 +1,13 @@
-import streamlit as st
-import tempfile
+import html
 import math
+import tempfile
+from dataclasses import asdict, is_dataclass
+from enum import Enum
+from io import BytesIO
 from pathlib import Path
-from dataclasses import is_dataclass, asdict
+
+import pandas as pd
+import streamlit as st
 
 from item_analyzer import ItemAnalyzer
 
@@ -13,6 +18,7 @@ from item_analyzer import ItemAnalyzer
 
 st.set_page_config(
     page_title="Item Analysis Instrument",
+    page_icon="🎯",
     layout="wide",
     initial_sidebar_state="collapsed"
 )
@@ -22,95 +28,115 @@ st.set_page_config(
 # CUSTOM CSS
 # ============================================================
 
-st.markdown("""
+st.markdown(
+    """
 <style>
-    html, body, [data-testid="stAppViewContainer"] {
-        background-color: #F3F5F8 !important;
-        color: #16233E !important;
-    }
 
-    h1, h2, h3 {
-        font-family: 'Space Grotesk', sans-serif !important;
-    }
+html, body, [data-testid="stAppViewContainer"] {
+    background-color: #F3F5F8 !important;
+    color: #16233E !important;
+}
 
-    .header-box {
-        background-color: #16233E;
-        background-image:
-            linear-gradient(
-                rgba(255,255,255,0.04) 1px,
-                transparent 1px
-            ),
-            linear-gradient(
-                90deg,
-                rgba(255,255,255,0.04) 1px,
-                transparent 1px
-            );
-        background-size: 20px 20px;
-        padding: 30px;
-        border-radius: 14px;
-        color: #FFFFFF;
-        margin-bottom: 25px;
-    }
+h1, h2, h3 {
+    font-family: 'Space Grotesk', sans-serif !important;
+}
 
-    .badge-base {
-        display: inline-block;
-        padding: 4px 12px;
-        border-radius: 20px;
-        font-size: 11px;
-        font-weight: 700;
-        text-transform: uppercase;
-    }
+.header-box {
+    background-color: #16233E;
+    background-image:
+        linear-gradient(
+            rgba(255,255,255,0.04) 1px,
+            transparent 1px
+        ),
+        linear-gradient(
+            90deg,
+            rgba(255,255,255,0.04) 1px,
+            transparent 1px
+        );
 
-    .badge-retain {
-        background-color: #E3F3EA;
-        color: #2F8F5B;
-    }
+    background-size: 20px 20px;
 
-    .badge-review {
-        background-color: #FBF0DE;
-        color: #C9862B;
-    }
+    padding: 30px;
 
-    .badge-revise {
-        background-color: #FAEAE2;
-        color: #BD5B34;
-    }
+    border-radius: 14px;
 
-    .badge-discard {
-        background-color: #FAE7E5;
-        color: #B23A32;
-    }
+    color: #FFFFFF;
 
-    .dist-container {
-        display: flex;
-        width: 100%;
-        height: 26px;
-        border-radius: 6px;
-        overflow: hidden;
-        margin: 10px 0;
-        border: 1px solid #DEE4EF;
-    }
+    margin-bottom: 25px;
+}
 
-    .dist-segment {
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        color: white;
-        font-family: monospace;
-        font-size: 11px;
-        font-weight: bold;
-    }
+.badge-base {
+    display: inline-block;
+    padding: 4px 12px;
+    border-radius: 20px;
+    font-size: 11px;
+    font-weight: 700;
+    text-transform: uppercase;
+}
+
+.badge-retain {
+    background-color: #E3F3EA;
+    color: #2F8F5B;
+}
+
+.badge-review {
+    background-color: #FBF0DE;
+    color: #C9862B;
+}
+
+.badge-revise {
+    background-color: #FAEAE2;
+    color: #BD5B34;
+}
+
+.badge-discard {
+    background-color: #FAE7E5;
+    color: #B23A32;
+}
+
+.dist-container {
+    display: flex;
+    width: 100%;
+    height: 30px;
+    border-radius: 6px;
+    overflow: hidden;
+    margin: 10px 0;
+    border: 1px solid #DEE4EF;
+}
+
+.dist-segment {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: white;
+    font-family: monospace;
+    font-size: 11px;
+    font-weight: bold;
+}
+
+.report-title {
+    font-size: 18px;
+    font-weight: 700;
+    color: #16233E;
+}
+
+.small-muted {
+    font-size: 12px;
+    color: #65728A;
+}
+
 </style>
-""", unsafe_allow_html=True)
+""",
+    unsafe_allow_html=True
+)
 
 
 # ============================================================
 # HEADER
-# Uses st.html() so HTML is rendered rather than displayed
-# as literal Markdown/code.
 # ============================================================
 
-st.html("""
+st.html(
+    """
 <div class="header-box">
 
     <div style="
@@ -136,101 +162,629 @@ st.html("""
         margin-bottom: 0;
     ">
         Upload an answer key and student responses to calculate
-        difficulty, discrimination, and distractor readouts for every item.
+        difficulty, discrimination, and distractor readouts
+        for every item.
     </p>
 
 </div>
-""")
-
-
-# ============================================================
-# UPLOAD REGION
-# ============================================================
-
-st.markdown("### 📥 Load Test Data")
-
-col_key, col_data = st.columns(2)
-
-with col_key:
-    key_file = st.file_uploader(
-        "Choose Answer Key Spreadsheet (.xlsx)",
-        type=["xlsx", "xls"]
-    )
-
-with col_data:
-    data_file = st.file_uploader(
-        "Choose Student Responses Spreadsheet (.xlsx)",
-        type=["xlsx", "xls"]
-    )
+"""
+)
 
 
 # ============================================================
 # HELPER FUNCTIONS
 # ============================================================
 
-def get_status_class(status, block_type="diff"):
-    if status in ["Ideal", "Good"]:
-        return "good"
-
-    if status in ["Too Easy", "Poor"]:
-        return "mid"
-
-    return "poor"
-
-
 def sanitize(data):
     """
-    Convert dataclass objects such as ItemStats into dictionaries,
-    recursively sanitize nested structures, and replace NaN/Infinity
-    with 0.0.
+    Convert dataclasses and Enum values into JSON/Streamlit-safe
+    Python objects.
+
+    Also handles NaN and Infinity.
     """
 
-    # Dataclass objects such as ItemStats
-    if is_dataclass(data):
-        return sanitize(asdict(data))
+    # IMPORTANT:
+    # This fixes the previous:
+    # NameError: name 'Enum' is not defined
+    if isinstance(data, Enum):
+        return data.value
 
-    # Dictionaries
+    if is_dataclass(data):
+
+        return sanitize(
+            asdict(data)
+        )
+
     if isinstance(data, dict):
+
         return {
-            k: sanitize(v)
-            for k, v in data.items()
+            key: sanitize(value)
+            for key, value in data.items()
         }
 
-    # Lists
     if isinstance(data, list):
+
         return [
-            sanitize(i)
-            for i in data
+            sanitize(item)
+            for item in data
         ]
 
-    # Tuples
     if isinstance(data, tuple):
+
         return [
-            sanitize(i)
-            for i in data
+            sanitize(item)
+            for item in data
         ]
 
-    # Floats
     if isinstance(data, float):
+
         if math.isnan(data) or math.isinf(data):
+
             return 0.0
 
     return data
 
 
-def get_value(obj, key, default=None):
-    """
-    Safely retrieve a value from dictionaries or objects.
-    """
+def get_value(
+    obj,
+    key,
+    default=None
+):
 
     if isinstance(obj, dict):
-        return obj.get(key, default)
 
-    return getattr(obj, key, default)
+        return obj.get(
+            key,
+            default
+        )
+
+    return getattr(
+        obj,
+        key,
+        default
+    )
+
+
+def recommendation_badge(
+    recommendation
+):
+
+    rec = str(
+        recommendation
+    ).upper()
+
+    if rec == "RETAIN":
+
+        return (
+            '<span class="badge-base badge-retain">'
+            'RETAIN'
+            '</span>'
+        )
+
+    if rec == "REVIEW":
+
+        return (
+            '<span class="badge-base badge-review">'
+            'REVIEW'
+            '</span>'
+        )
+
+    if rec == "REVISE":
+
+        return (
+            '<span class="badge-base badge-revise">'
+            'REVISE'
+            '</span>'
+        )
+
+    if rec == "DISCARD":
+
+        return (
+            '<span class="badge-base badge-discard">'
+            'DISCARD'
+            '</span>'
+        )
+
+    return (
+        '<span class="badge-base badge-review">'
+        f'{html.escape(rec)}'
+        '</span>'
+    )
 
 
 # ============================================================
-# RUN COMPUTING ENGINE
+# EXCEL REPORT GENERATOR
+# ============================================================
+
+def create_excel_report(results):
+
+    """
+    Create a complete downloadable Excel report.
+
+    Sheet order:
+
+    1. Item Analysis
+    2. Option Breakdown
+    3. Overall Summary
+    4. Student Ranking
+    """
+
+    output = BytesIO()
+
+    summary = get_value(
+        results,
+        "summary",
+        {}
+    )
+
+    items = get_value(
+        results,
+        "items",
+        []
+    )
+
+    students = get_value(
+        results,
+        "students",
+        []
+    )
+
+    # --------------------------------------------------------
+    # ITEM ANALYSIS DATA
+    # --------------------------------------------------------
+
+    item_rows = []
+
+    for item in items:
+
+        recommendation = get_value(
+            item,
+            "recommendation",
+            ""
+        )
+
+        if isinstance(
+            recommendation,
+            Enum
+        ):
+
+            recommendation = (
+                recommendation.value
+            )
+
+        nfd = get_value(
+            item,
+            "non_functional_distractors",
+            []
+        )
+
+        if nfd is None:
+            nfd = []
+
+        item_rows.append({
+
+            "Question":
+                get_value(
+                    item,
+                    "question",
+                    ""
+                ),
+
+            "Question Number":
+                get_value(
+                    item,
+                    "question_number",
+                    ""
+                ),
+
+            "Correct Answer":
+                get_value(
+                    item,
+                    "correct_answer",
+                    ""
+                ),
+
+            "Correct Count":
+                get_value(
+                    item,
+                    "correct_count",
+                    0
+                ),
+
+            "Total Students":
+                get_value(
+                    item,
+                    "total_students",
+                    0
+                ),
+
+            "Difficulty Index":
+                get_value(
+                    item,
+                    "difficulty",
+                    0
+                ),
+
+            "Difficulty Status":
+                get_value(
+                    item,
+                    "difficulty_status",
+                    ""
+                ),
+
+            "Discrimination Index":
+                get_value(
+                    item,
+                    "discrimination",
+                    0
+                ),
+
+            "Discrimination Status":
+                get_value(
+                    item,
+                    "discrimination_status",
+                    ""
+                ),
+
+            "Distractor Efficiency (%)":
+                get_value(
+                    item,
+                    "distractor_efficiency",
+                    0
+                ),
+
+            "Non-functional Distractors":
+                ", ".join(
+                    str(x)
+                    for x in nfd
+                )
+                if nfd
+                else "None",
+
+            "Omitted Count":
+                get_value(
+                    item,
+                    "omitted_count",
+                    0
+                ),
+
+            "Omitted (%)":
+                get_value(
+                    item,
+                    "omitted_percentage",
+                    0
+                ),
+
+            "Recommendation":
+                str(
+                    recommendation
+                ).upper()
+        })
+
+    item_df = pd.DataFrame(
+        item_rows
+    )
+
+    # --------------------------------------------------------
+    # OPTION BREAKDOWN
+    # --------------------------------------------------------
+
+    option_rows = []
+
+    for item in items:
+
+        question = get_value(
+            item,
+            "question",
+            ""
+        )
+
+        breakdown = get_value(
+            item,
+            "option_breakdown",
+            []
+        )
+
+        for option in breakdown:
+
+            is_correct = bool(
+                get_value(
+                    option,
+                    "is_correct",
+                    False
+                )
+            )
+
+            is_functional = bool(
+                get_value(
+                    option,
+                    "is_functional",
+                    False
+                )
+            )
+
+            if is_correct:
+
+                status = "Correct Answer"
+
+            elif is_functional:
+
+                status = "Functional Distractor"
+
+            else:
+
+                status = "Non-functional Distractor"
+
+            option_rows.append({
+
+                "Question":
+                    question,
+
+                "Option":
+                    get_value(
+                        option,
+                        "option",
+                        ""
+                    ),
+
+                "Selection Count":
+                    get_value(
+                        option,
+                        "count",
+                        0
+                    ),
+
+                "Percentage":
+                    get_value(
+                        option,
+                        "percentage",
+                        0
+                    ),
+
+                "Status":
+                    status
+            })
+
+    option_df = pd.DataFrame(
+        option_rows
+    )
+
+    # --------------------------------------------------------
+    # SUMMARY
+    # --------------------------------------------------------
+
+    summary_df = pd.DataFrame({
+
+        "Measure": [
+
+            "Total Students",
+
+            "Total Evaluated Items",
+
+            "Mean Score",
+
+            "Standard Deviation",
+
+            "Minimum Score",
+
+            "Maximum Score",
+
+            "Mean Percentage"
+        ],
+
+        "Value": [
+
+            get_value(
+                summary,
+                "total_students",
+                0
+            ),
+
+            get_value(
+                summary,
+                "total_questions",
+                0
+            ),
+
+            get_value(
+                summary,
+                "mean_score",
+                0
+            ),
+
+            get_value(
+                summary,
+                "std_score",
+                0
+            ),
+
+            get_value(
+                summary,
+                "min_score",
+                0
+            ),
+
+            get_value(
+                summary,
+                "max_score",
+                0
+            ),
+
+            get_value(
+                summary,
+                "mean_percentage",
+                0
+            )
+        ]
+    })
+
+    # --------------------------------------------------------
+    # STUDENT RANKING
+    # --------------------------------------------------------
+
+    student_rows = []
+
+    for student in students:
+
+        student_rows.append({
+
+            "Rank":
+                get_value(
+                    student,
+                    "rank",
+                    0
+                ),
+
+            "Student ID":
+                get_value(
+                    student,
+                    "student_id",
+                    ""
+                ),
+
+            "Name":
+                get_value(
+                    student,
+                    "name",
+                    ""
+                ),
+
+            "Score":
+                get_value(
+                    student,
+                    "score",
+                    0
+                ),
+
+            "Percentage":
+                get_value(
+                    student,
+                    "percentage",
+                    0
+                )
+        })
+
+    student_df = pd.DataFrame(
+        student_rows
+    )
+
+    # --------------------------------------------------------
+    # WRITE EXCEL
+    # --------------------------------------------------------
+
+    with pd.ExcelWriter(
+        output,
+        engine="openpyxl"
+    ) as writer:
+
+        item_df.to_excel(
+            writer,
+            sheet_name="Item Analysis",
+            index=False
+        )
+
+        option_df.to_excel(
+            writer,
+            sheet_name="Option Breakdown",
+            index=False
+        )
+
+        summary_df.to_excel(
+            writer,
+            sheet_name="Overall Summary",
+            index=False
+        )
+
+        student_df.to_excel(
+            writer,
+            sheet_name="Student Ranking",
+            index=False
+        )
+
+        # ----------------------------------------------------
+        # FORMATTING
+        # ----------------------------------------------------
+
+        workbook = writer.book
+
+        for worksheet in workbook.worksheets:
+
+            # Freeze first row
+            worksheet.freeze_panes = "A2"
+
+            # Auto-size columns
+            for column_cells in worksheet.columns:
+
+                max_length = 0
+
+                column_letter = (
+                    column_cells[0]
+                    .column_letter
+                )
+
+                for cell in column_cells:
+
+                    try:
+
+                        cell_length = len(
+                            str(
+                                cell.value
+                            )
+                        )
+
+                        max_length = max(
+                            max_length,
+                            cell_length
+                        )
+
+                    except Exception:
+
+                        pass
+
+                worksheet.column_dimensions[
+                    column_letter
+                ].width = min(
+                    max(
+                        max_length + 2,
+                        12
+                    ),
+                    40
+                )
+
+    output.seek(0)
+
+    return output.getvalue()
+
+
+# ============================================================
+# FILE UPLOAD
+# ============================================================
+
+st.markdown(
+    "### 📥 Load Test Data"
+)
+
+col_key, col_data = st.columns(2)
+
+with col_key:
+
+    key_file = st.file_uploader(
+        "Choose Answer Key Spreadsheet",
+        type=["xlsx", "xls"],
+        key="answer_key"
+    )
+
+with col_data:
+
+    data_file = st.file_uploader(
+        "Choose Student Responses Spreadsheet",
+        type=["xlsx", "xls"],
+        key="student_data"
+    )
+
+
+# ============================================================
+# ANALYSIS
 # ============================================================
 
 if key_file and data_file:
@@ -241,20 +795,31 @@ if key_file and data_file:
         use_container_width=True
     ):
 
-        with st.spinner("Processing analysis files in backend..."):
+        with st.spinner(
+            "Processing analysis files..."
+        ):
 
             try:
 
-                # ----------------------------------------------------
-                # CREATE TEMPORARY FILES
-                # ----------------------------------------------------
+                # ====================================================
+                # TEMPORARY FILES
+                # ====================================================
 
                 with tempfile.TemporaryDirectory() as tmp_dir:
 
-                    tmp_path = Path(tmp_dir)
+                    tmp_path = Path(
+                        tmp_dir
+                    )
 
-                    key_path = tmp_path / "key.xlsx"
-                    data_path = tmp_path / "data.xlsx"
+                    key_path = (
+                        tmp_path
+                        / "key.xlsx"
+                    )
+
+                    data_path = (
+                        tmp_path
+                        / "data.xlsx"
+                    )
 
                     key_path.write_bytes(
                         key_file.getvalue()
@@ -264,461 +829,36 @@ if key_file and data_file:
                         data_file.getvalue()
                     )
 
-                    # ------------------------------------------------
-                    # RUN ANALYSIS ENGINE
-                    # ------------------------------------------------
+                    # =================================================
+                    # ANALYZER
+                    # =================================================
 
                     analyzer = ItemAnalyzer()
 
-                    raw_results = analyzer.run_analysis(
-                        str(key_path),
-                        str(data_path)
+                    raw_results = (
+                        analyzer.run_analysis(
+                            str(key_path),
+                            str(data_path)
+                        )
                     )
 
-                # ----------------------------------------------------
-                # SANITIZE ANALYZER OUTPUT
-                # ----------------------------------------------------
+                # ====================================================
+                # SANITIZE
+                # ====================================================
 
-                results = sanitize(raw_results)
-
-                # ----------------------------------------------------
-                # GLOBAL SUMMARY
-                # ----------------------------------------------------
-
-                summary = get_value(
-                    results,
-                    "summary",
-                    {}
+                results = sanitize(
+                    raw_results
                 )
 
-                st.markdown("### 📊 Overall Test Summary")
+                # Store results in session state
+                # so they remain available after download.
+                st.session_state[
+                    "analysis_results"
+                ] = results
 
-                metric_col1, metric_col2 = st.columns(2)
-
-                with metric_col1:
-                    st.metric(
-                        label="Total Students Scaled",
-                        value=get_value(
-                            summary,
-                            "total_students",
-                            0
-                        )
-                    )
-
-                with metric_col2:
-                    st.metric(
-                        label="Total Evaluated Items",
-                        value=get_value(
-                            summary,
-                            "total_questions",
-                            0
-                        )
-                    )
-
-                # ----------------------------------------------------
-                # PER-QUESTION ANALYSIS
-                # ----------------------------------------------------
-
-                st.markdown("### 🔬 Per-Question Analysis")
-
-                st.caption(
-                    "Click a question card below to expand its "
-                    "full response distribution profile and option breakdowns."
+                st.success(
+                    "✅ Analysis completed successfully."
                 )
-
-                items = get_value(
-                    results,
-                    "items",
-                    []
-                )
-
-                if not isinstance(items, list):
-                    items = list(items) if items else []
-
-                # ----------------------------------------------------
-                # QUESTION LOOP
-                # ----------------------------------------------------
-
-                for idx, item in enumerate(items):
-
-                    q_text = get_value(
-                        item,
-                        "question",
-                        f"Question {idx + 1}"
-                    )
-
-                    rec = get_value(
-                        item,
-                        "recommendation",
-                        "Review"
-                    )
-
-                    if rec is None:
-                        rec = "Review"
-
-                    rec = str(rec).lower()
-
-                    with st.expander(
-                        f"📦 {q_text} — Recommendation: {rec.upper()}"
-                    ):
-
-                        # ============================================
-                        # METRIC GAUGES
-                        # ============================================
-
-                        g_col1, g_col2 = st.columns(2)
-
-                        # --------------------------------------------
-                        # DIFFICULTY
-                        # --------------------------------------------
-
-                        with g_col1:
-
-                            diff_val = get_value(
-                                item,
-                                "difficulty",
-                                0.0
-                            )
-
-                            diff_status = get_value(
-                                item,
-                                "difficulty_status",
-                                "N/A"
-                            )
-
-                            try:
-                                diff_val = float(diff_val)
-                            except (TypeError, ValueError):
-                                diff_val = 0.0
-
-                            st.metric(
-                                label="Difficulty Level",
-                                value=f"{diff_val:.3f}",
-                                delta=str(diff_status),
-                                delta_color="off"
-                            )
-
-                            st.progress(
-                                max(
-                                    0.0,
-                                    min(
-                                        1.0,
-                                        diff_val
-                                    )
-                                )
-                            )
-
-                        # --------------------------------------------
-                        # DISCRIMINATION
-                        # --------------------------------------------
-
-                        with g_col2:
-
-                            disc_val = get_value(
-                                item,
-                                "discrimination",
-                                0.0
-                            )
-
-                            disc_status = get_value(
-                                item,
-                                "discrimination_status",
-                                "N/A"
-                            )
-
-                            try:
-                                disc_val = float(disc_val)
-                            except (TypeError, ValueError):
-                                disc_val = 0.0
-
-                            st.metric(
-                                label="Discrimination Power",
-                                value=f"{disc_val:.3f}",
-                                delta=str(disc_status),
-                                delta_color="off"
-                            )
-
-                            norm_disc = (
-                                disc_val + 1.0
-                            ) / 2.0
-
-                            st.progress(
-                                max(
-                                    0.0,
-                                    min(
-                                        1.0,
-                                        norm_disc
-                                    )
-                                )
-                            )
-
-                        # ============================================
-                        # EXTRA METRICS
-                        # ============================================
-
-                        st.markdown("---")
-
-                        eff_rate = get_value(
-                            item,
-                            "distractor_efficiency",
-                            0.0
-                        )
-
-                        try:
-                            eff_rate = float(eff_rate)
-                        except (TypeError, ValueError):
-                            eff_rate = 0.0
-
-                        nfds_list = get_value(
-                            item,
-                            "non_functional_distractors",
-                            []
-                        )
-
-                        if nfds_list is None:
-                            nfds_list = []
-
-                        m_col1, m_col2 = st.columns(2)
-
-                        with m_col1:
-                            st.write(
-                                f"**Distractor Efficiency:** "
-                                f"`{eff_rate:.0f}%`"
-                            )
-
-                        with m_col2:
-
-                            nfd_string = (
-                                ", ".join(
-                                    str(x)
-                                    for x in nfds_list
-                                )
-                                if nfds_list
-                                else "None"
-                            )
-
-                            st.write(
-                                f"**Flagged NFDs:** "
-                                f"`{nfd_string}`"
-                            )
-
-                        # ============================================
-                        # RESPONSE DISTRIBUTION
-                        # ============================================
-
-                        st.markdown(
-                            "#### Response Data Distribution Chart"
-                        )
-
-                        breakdown = get_value(
-                            item,
-                            "option_breakdown",
-                            []
-                        )
-
-                        if breakdown is None:
-                            breakdown = []
-
-                        # --------------------------------------------
-                        # DISTRIBUTION BAR
-                        # --------------------------------------------
-
-                        bar_html = '<div class="dist-container">'
-
-                        for opt in breakdown:
-
-                            pct = get_value(
-                                opt,
-                                "percentage",
-                                0.0
-                            )
-
-                            opt_label = get_value(
-                                opt,
-                                "option",
-                                ""
-                            )
-
-                            try:
-                                pct = float(pct)
-                            except (TypeError, ValueError):
-                                pct = 0.0
-
-                            if pct > 0:
-
-                                is_correct = bool(
-                                    get_value(
-                                        opt,
-                                        "is_correct",
-                                        False
-                                    )
-                                )
-
-                                is_functional = bool(
-                                    get_value(
-                                        opt,
-                                        "is_functional",
-                                        False
-                                    )
-                                )
-
-                                if is_correct:
-                                    color = "#2F8F5B"
-
-                                elif is_functional:
-                                    color = "#2C5F8A"
-
-                                else:
-                                    color = "#B23A32"
-
-                                display_label = (
-                                    str(opt_label)
-                                    if pct >= 5
-                                    else ""
-                                )
-
-                                bar_html += (
-                                    '<div '
-                                    'class="dist-segment" '
-                                    f'style="flex: {pct} 0 auto; '
-                                    f'background-color: {color};" '
-                                    f'title="{opt_label}: '
-                                    f'{pct:.1f}%">'
-                                    f'{display_label}'
-                                    '</div>'
-                                )
-
-                        # --------------------------------------------
-                        # OMITTED RESPONSES
-                        # --------------------------------------------
-
-                        omitted_count = get_value(
-                            item,
-                            "omitted_count",
-                            0
-                        )
-
-                        try:
-                            omitted_count = int(
-                                omitted_count
-                            )
-                        except (TypeError, ValueError):
-                            omitted_count = 0
-
-                        if omitted_count > 0:
-
-                            omit_pct = get_value(
-                                item,
-                                "omitted_percentage",
-                                0.0
-                            )
-
-                            try:
-                                omit_pct = float(
-                                    omit_pct
-                                )
-                            except (TypeError, ValueError):
-                                omit_pct = 0.0
-
-                            bar_html += (
-                                '<div '
-                                'class="dist-segment" '
-                                'style="'
-                                f'flex: {omit_pct} 0 auto; '
-                                'background-color: #92A0BD;'
-                                f'" title="Omitted: '
-                                f'{omit_pct:.1f}%">'
-                                '—'
-                                '</div>'
-                            )
-
-                        bar_html += '</div>'
-
-                        st.markdown(
-                            bar_html,
-                            unsafe_allow_html=True
-                        )
-
-                        # ============================================
-                        # OPTION BREAKDOWN TABLE
-                        # ============================================
-
-                        grid_data = []
-
-                        for opt in breakdown:
-
-                            is_correct = bool(
-                                get_value(
-                                    opt,
-                                    "is_correct",
-                                    False
-                                )
-                            )
-
-                            is_functional = bool(
-                                get_value(
-                                    opt,
-                                    "is_functional",
-                                    False
-                                )
-                            )
-
-                            if is_correct:
-                                role = "✅ Correct Answer"
-
-                            elif is_functional:
-                                role = "Distractor OK"
-
-                            else:
-                                role = "❌ Non-functional"
-
-                            percentage = get_value(
-                                opt,
-                                "percentage",
-                                0.0
-                            )
-
-                            try:
-                                percentage = float(
-                                    percentage
-                                )
-                            except (TypeError, ValueError):
-                                percentage = 0.0
-
-                            grid_data.append({
-                                "Option Alternative":
-                                    get_value(
-                                        opt,
-                                        "option",
-                                        ""
-                                    ),
-
-                                "Selection Count":
-                                    get_value(
-                                        opt,
-                                        "count",
-                                        0
-                                    ),
-
-                                "Distribution Share":
-                                    f"{percentage:.1f}%",
-
-                                "Diagnostic Status Evaluation":
-                                    role
-                            })
-
-                        if grid_data:
-                            st.table(grid_data)
-
-                        else:
-                            st.info(
-                                "No option breakdown data "
-                                "was returned for this item."
-                            )
-
-            # ========================================================
-            # ERROR HANDLING
-            # ========================================================
 
             except Exception as e:
 
@@ -730,17 +870,839 @@ if key_file and data_file:
                     "🔍 Technical Error Details",
                     expanded=True
                 ):
+
                     st.exception(e)
 
 
 # ============================================================
-# FILE UPLOAD REMINDER
+# DISPLAY RESULTS
+# ============================================================
+
+if (
+    "analysis_results"
+    in st.session_state
+):
+
+    results = st.session_state[
+        "analysis_results"
+    ]
+
+    # ========================================================
+    # GLOBAL SUMMARY
+    # ========================================================
+
+    summary = get_value(
+        results,
+        "summary",
+        {}
+    )
+
+    st.markdown(
+        "### 📊 Overall Test Summary"
+    )
+
+    metric_col1, metric_col2, metric_col3 = st.columns(3)
+
+    with metric_col1:
+
+        st.metric(
+            "Total Students",
+            get_value(
+                summary,
+                "total_students",
+                0
+            )
+        )
+
+    with metric_col2:
+
+        st.metric(
+            "Total Evaluated Items",
+            get_value(
+                summary,
+                "total_questions",
+                0
+            )
+        )
+
+    with metric_col3:
+
+        mean_score = get_value(
+            summary,
+            "mean_score",
+            0
+        )
+
+        total_questions = get_value(
+            summary,
+            "total_questions",
+            0
+        )
+
+        st.metric(
+            "Mean Score",
+            f"{float(mean_score):.2f} / {total_questions}"
+        )
+
+    # ========================================================
+    # SECOND SUMMARY ROW
+    # ========================================================
+
+    metric_col4, metric_col5, metric_col6 = st.columns(3)
+
+    with metric_col4:
+
+        st.metric(
+            "Standard Deviation",
+            f"{float(get_value(summary, 'std_score', 0)):.2f}"
+        )
+
+    with metric_col5:
+
+        st.metric(
+            "Minimum Score",
+            get_value(
+                summary,
+                "min_score",
+                0
+            )
+        )
+
+    with metric_col6:
+
+        st.metric(
+            "Maximum Score",
+            get_value(
+                summary,
+                "max_score",
+                0
+            )
+        )
+
+    # ========================================================
+    # DOWNLOAD REPORT
+    # ========================================================
+
+    st.markdown("---")
+
+    st.markdown(
+        "### 📥 Download Analysis Report"
+    )
+
+    report_bytes = create_excel_report(
+        results
+    )
+
+    st.download_button(
+        label="⬇️ Download Complete Item Analysis Report",
+        data=report_bytes,
+        file_name="Item_Analysis_Report.xlsx",
+        mime=(
+            "application/vnd.openxmlformats-officedocument."
+            "spreadsheetml.sheet"
+        ),
+        type="primary",
+        use_container_width=True
+    )
+
+    st.caption(
+        "The report contains Item Analysis first, followed by "
+        "Option Breakdown, Overall Summary, and Student Ranking."
+    )
+
+    # ========================================================
+    # ITEM ANALYSIS
+    # ========================================================
+
+    st.markdown("---")
+
+    st.markdown(
+        "### 🔬 Item-Wise Analysis"
+    )
+
+    st.caption(
+        "Each question is evaluated individually for difficulty, "
+        "discrimination, distractor efficiency, and final recommendation."
+    )
+
+    items = get_value(
+        results,
+        "items",
+        []
+    )
+
+    if not isinstance(
+        items,
+        list
+    ):
+
+        items = list(items)
+
+    # ========================================================
+    # RECOMMENDATION SUMMARY
+    # ========================================================
+
+    retain_count = 0
+    review_count = 0
+    revise_count = 0
+    discard_count = 0
+
+    for item in items:
+
+        recommendation = str(
+            get_value(
+                item,
+                "recommendation",
+                ""
+            )
+        ).upper()
+
+        if recommendation == "RETAIN":
+            retain_count += 1
+
+        elif recommendation == "REVIEW":
+            review_count += 1
+
+        elif recommendation == "REVISE":
+            revise_count += 1
+
+        elif recommendation == "DISCARD":
+            discard_count += 1
+
+    rec1, rec2, rec3, rec4 = st.columns(4)
+
+    with rec1:
+        st.metric(
+            "✅ Retain",
+            retain_count
+        )
+
+    with rec2:
+        st.metric(
+            "🟡 Review",
+            review_count
+        )
+
+    with rec3:
+        st.metric(
+            "🟠 Revise",
+            revise_count
+        )
+
+    with rec4:
+        st.metric(
+            "🔴 Discard",
+            discard_count
+        )
+
+    # ========================================================
+    # QUESTION LOOP
+    # ========================================================
+
+    for index, item in enumerate(
+        items,
+        start=1
+    ):
+
+        question = get_value(
+            item,
+            "question",
+            f"Question {index}"
+        )
+
+        recommendation = get_value(
+            item,
+            "recommendation",
+            "REVIEW"
+        )
+
+        recommendation = str(
+            recommendation
+        ).upper()
+
+        # ----------------------------------------------------
+        # EXPANDER
+        # ----------------------------------------------------
+
+        with st.expander(
+            f"📦 {question} — {recommendation}",
+            expanded=False
+        ):
+
+            # =================================================
+            # RECOMMENDATION
+            # =================================================
+
+            st.markdown(
+                recommendation_badge(
+                    recommendation
+                ),
+                unsafe_allow_html=True
+            )
+
+            st.markdown("")
+
+            # =================================================
+            # BASIC ITEM INFORMATION
+            # =================================================
+
+            info1, info2, info3 = st.columns(3)
+
+            with info1:
+
+                st.write(
+                    f"**Correct Answer:** "
+                    f"`{get_value(item, 'correct_answer', '')}`"
+                )
+
+            with info2:
+
+                st.write(
+                    f"**Correct Responses:** "
+                    f"`{get_value(item, 'correct_count', 0)}` "
+                    f"/ "
+                    f"`{get_value(item, 'total_students', 0)}`"
+                )
+
+            with info3:
+
+                st.write(
+                    f"**Omitted Responses:** "
+                    f"`{get_value(item, 'omitted_count', 0)}` "
+                    f""
+                )
+
+            # =================================================
+            # METRICS
+            # =================================================
+
+            st.markdown("---")
+
+            gauge1, gauge2 = st.columns(2)
+
+            # -------------------------------------------------
+            # DIFFICULTY
+            # -------------------------------------------------
+
+            with gauge1:
+
+                difficulty = get_value(
+                    item,
+                    "difficulty",
+                    0.0
+                )
+
+                try:
+
+                    difficulty = float(
+                        difficulty
+                    )
+
+                except (
+                    TypeError,
+                    ValueError
+                ):
+
+                    difficulty = 0.0
+
+                difficulty_status = get_value(
+                    item,
+                    "difficulty_status",
+                    "N/A"
+                )
+
+                st.metric(
+                    "Difficulty Index",
+                    f"{difficulty:.3f}",
+                    delta=str(
+                        difficulty_status
+                    ),
+                    delta_color="off"
+                )
+
+                st.progress(
+                    max(
+                        0.0,
+                        min(
+                            1.0,
+                            difficulty
+                        )
+                    )
+                )
+
+                st.caption(
+                    "Proportion of students who answered correctly."
+                )
+
+            # -------------------------------------------------
+            # DISCRIMINATION
+            # -------------------------------------------------
+
+            with gauge2:
+
+                discrimination = get_value(
+                    item,
+                    "discrimination",
+                    0.0
+                )
+
+                try:
+
+                    discrimination = float(
+                        discrimination
+                    )
+
+                except (
+                    TypeError,
+                    ValueError
+                ):
+
+                    discrimination = 0.0
+
+                discrimination_status = get_value(
+                    item,
+                    "discrimination_status",
+                    "N/A"
+                )
+
+                st.metric(
+                    "Discrimination Index",
+                    f"{discrimination:.3f}",
+                    delta=str(
+                        discrimination_status
+                    ),
+                    delta_color="off"
+                )
+
+                # Convert -1..+1 to 0..1
+                normalized_discrimination = (
+                    discrimination + 1
+                ) / 2
+
+                st.progress(
+                    max(
+                        0.0,
+                        min(
+                            1.0,
+                            normalized_discrimination
+                        )
+                    )
+                )
+
+                st.caption(
+                    "Difference between upper and lower group performance."
+                )
+
+            # =================================================
+            # DISTRACTOR METRICS
+            # =================================================
+
+            st.markdown("---")
+
+            extra1, extra2 = st.columns(2)
+
+            with extra1:
+
+                efficiency = get_value(
+                    item,
+                    "distractor_efficiency",
+                    0.0
+                )
+
+                try:
+
+                    efficiency = float(
+                        efficiency
+                    )
+
+                except (
+                    TypeError,
+                    ValueError
+                ):
+
+                    efficiency = 0.0
+
+                st.metric(
+                    "Distractor Efficiency",
+                    f"{efficiency:.0f}%"
+                )
+
+            with extra2:
+
+                nfd_list = get_value(
+                    item,
+                    "non_functional_distractors",
+                    []
+                )
+
+                if nfd_list:
+
+                    st.write(
+                        "**Non-functional Distractors:**"
+                    )
+
+                    st.error(
+                        ", ".join(
+                            str(x)
+                            for x in nfd_list
+                        )
+                    )
+
+                else:
+
+                    st.write(
+                        "**Non-functional Distractors:**"
+                    )
+
+                    st.success(
+                        "None"
+                    )
+
+            # =================================================
+            # RESPONSE DISTRIBUTION
+            # =================================================
+
+            st.markdown("---")
+
+            st.markdown(
+                "#### 📊 Response Distribution"
+            )
+
+            breakdown = get_value(
+                item,
+                "option_breakdown",
+                []
+            )
+
+            if breakdown is None:
+
+                breakdown = []
+
+            # -------------------------------------------------
+            # BAR
+            # -------------------------------------------------
+
+            bar_html = (
+                '<div class="dist-container">'
+            )
+
+            for option in breakdown:
+
+                percentage = get_value(
+                    option,
+                    "percentage",
+                    0
+                )
+
+                option_label = get_value(
+                    option,
+                    "option",
+                    ""
+                )
+
+                try:
+
+                    percentage = float(
+                        percentage
+                    )
+
+                except (
+                    TypeError,
+                    ValueError
+                ):
+
+                    percentage = 0.0
+
+                if percentage <= 0:
+
+                    continue
+
+                is_correct = bool(
+                    get_value(
+                        option,
+                        "is_correct",
+                        False
+                    )
+                )
+
+                is_functional = bool(
+                    get_value(
+                        option,
+                        "is_functional",
+                        False
+                    )
+                )
+
+                if is_correct:
+
+                    background = "#2F8F5B"
+
+                elif is_functional:
+
+                    background = "#2C5F8A"
+
+                else:
+
+                    background = "#B23A32"
+
+                label = (
+                    str(option_label)
+                    if percentage >= 5
+                    else ""
+                )
+
+                safe_label = html.escape(
+                    label
+                )
+
+                bar_html += (
+                    '<div '
+                    'class="dist-segment" '
+                    f'style="flex: {percentage} 0 auto; '
+                    f'background-color: {background};" '
+                    f'title="{safe_label}: '
+                    f'{percentage:.1f}%">'
+                    f'{safe_label}'
+                    '</div>'
+                )
+
+            # -------------------------------------------------
+            # OMITTED
+            # -------------------------------------------------
+
+            omitted_count = get_value(
+                item,
+                "omitted_count",
+                0
+            )
+
+            omitted_percentage = get_value(
+                item,
+                "omitted_percentage",
+                0
+            )
+
+            try:
+
+                omitted_count = int(
+                    omitted_count
+                )
+
+            except (
+                TypeError,
+                ValueError
+            ):
+
+                omitted_count = 0
+
+            try:
+
+                omitted_percentage = float(
+                    omitted_percentage
+                )
+
+            except (
+                TypeError,
+                ValueError
+            ):
+
+                omitted_percentage = 0.0
+
+            if (
+                omitted_count > 0
+                and
+                omitted_percentage > 0
+            ):
+
+                bar_html += (
+                    '<div '
+                    'class="dist-segment" '
+                    f'style="flex: '
+                    f'{omitted_percentage} 0 auto; '
+                    'background-color: #92A0BD;" '
+                    f'title="Omitted: '
+                    f'{omitted_percentage:.1f}%">'
+                    '—'
+                    '</div>'
+                )
+
+            bar_html += "</div>"
+
+            st.markdown(
+                bar_html,
+                unsafe_allow_html=True
+            )
+
+            # =================================================
+            # OPTION TABLE
+            # =================================================
+
+            st.markdown(
+                "#### Option Breakdown"
+            )
+
+            grid_data = []
+
+            for option in breakdown:
+
+                is_correct = bool(
+                    get_value(
+                        option,
+                        "is_correct",
+                        False
+                    )
+                )
+
+                is_functional = bool(
+                    get_value(
+                        option,
+                        "is_functional",
+                        False
+                    )
+                )
+
+                if is_correct:
+
+                    role = "✅ Correct Answer"
+
+                elif is_functional:
+
+                    role = "✓ Functional Distractor"
+
+                else:
+
+                    role = "❌ Non-functional Distractor"
+
+                percentage = get_value(
+                    option,
+                    "percentage",
+                    0
+                )
+
+                try:
+
+                    percentage = float(
+                        percentage
+                    )
+
+                except (
+                    TypeError,
+                    ValueError
+                ):
+
+                    percentage = 0.0
+
+                grid_data.append({
+
+                    "Option":
+                        get_value(
+                            option,
+                            "option",
+                            ""
+                        ),
+
+                    "Selection Count":
+                        get_value(
+                            option,
+                            "count",
+                            0
+                        ),
+
+                    "Distribution":
+                        f"{percentage:.1f}%",
+
+                    "Diagnostic Evaluation":
+                        role
+                })
+
+            if grid_data:
+
+                st.table(
+                    grid_data
+                )
+
+            else:
+
+                st.info(
+                    "No option breakdown data was returned."
+                )
+
+    # ========================================================
+    # FINAL RECOMMENDATION SUMMARY
+    # ========================================================
+
+    st.markdown("---")
+
+    st.markdown(
+        "### 📋 Item Recommendation Summary"
+    )
+
+    recommendation_rows = []
+
+    for item in items:
+
+        recommendation = str(
+            get_value(
+                item,
+                "recommendation",
+                ""
+            )
+        ).upper()
+
+        recommendation_rows.append({
+
+            "Question":
+                get_value(
+                    item,
+                    "question",
+                    ""
+                ),
+
+            "Difficulty":
+                f"{float(get_value(item, 'difficulty', 0)):.3f}",
+
+            "Difficulty Status":
+                get_value(
+                    item,
+                    "difficulty_status",
+                    ""
+                ),
+
+            "Discrimination":
+                f"{float(get_value(item, 'discrimination', 0)):.3f}",
+
+            "Discrimination Status":
+                get_value(
+                    item,
+                    "discrimination_status",
+                    ""
+                ),
+
+            "Distractor Efficiency":
+                f"{float(get_value(item, 'distractor_efficiency', 0)):.0f}%",
+
+            "Recommendation":
+                recommendation
+        })
+
+    if recommendation_rows:
+
+        st.dataframe(
+            pd.DataFrame(
+                recommendation_rows
+            ),
+            use_container_width=True,
+            hide_index=True
+        )
+
+
+# ============================================================
+# UPLOAD REMINDER
 # ============================================================
 
 else:
 
     st.info(
-        "💡 Please ensure both your Answer Key and Student "
-        "Responses Excel templates are uploaded above to "
-        "unlock the analysis dashboard."
+        "💡 Please upload both the Answer Key and Student "
+        "Responses Excel files to unlock the analysis dashboard."
     )
