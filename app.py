@@ -16,6 +16,14 @@ from item_analyzer import ItemAnalyzer
 # PAGE CONFIGURATION
 # ============================================================
 
+title_col, image_col = st.columns([3, 1])
+
+with image_col:
+    st.image(
+        "assets/motithang-hss.jpg",
+        caption="Motithang HSS",
+        use_container_width=True,
+    )
 st.set_page_config(
     page_title="Item Analysis",
     page_icon="",
