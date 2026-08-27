@@ -5,6 +5,7 @@ from dataclasses import asdict, is_dataclass
 from enum import Enum
 from io import BytesIO
 from pathlib import Path
+import base64
 
 import pandas as pd
 import streamlit as st
@@ -15,15 +16,14 @@ from item_analyzer import ItemAnalyzer
 # ============================================================
 # PAGE CONFIGURATION
 # ============================================================
+def image_data_url(path: str) -> str:
+    encoded = base64.b64encode(
+        Path(path).read_bytes()
+    ).decode("utf-8")
+    return f"data:image/jpeg;base64,{encoded}"
 
-title_col, image_col = st.columns([3, 1])
 
-with image_col:
-    st.image(
-        "assets/motithang-hss.jpg",
-        caption="Motithang HSS",
-        use_container_width=True,
-    )
+background_image = image_data_url("assets/motithang-hss.jpg")
 st.set_page_config(
     page_title="Item Analysis",
     page_icon="",
@@ -136,6 +136,25 @@ h1, h2, h3 {
 </style>
 """,
     unsafe_allow_html=True
+)
+
+st.markdown(
+    f"""
+<style>
+[data-testid="stAppViewContainer"] {{
+    background-image:
+        linear-gradient(
+            rgba(243, 245, 248, 0.78),
+            rgba(243, 245, 248, 0.78)
+        ),
+        url("data:image/jpeg;base64,{background_image}") !important;
+    background-size: cover !important;
+    background-position: center !important;
+    background-attachment: fixed !important;
+}}
+</style>
+""",
+    unsafe_allow_html=True,
 )
 
 
