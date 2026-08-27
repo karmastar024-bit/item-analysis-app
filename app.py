@@ -898,7 +898,7 @@ if (
     )
 
     st.markdown(
-        "### 📊 Overall Test Summary"
+        "### Overall Summary"
     )
 
     metric_col1, metric_col2, metric_col3 = st.columns(3)
@@ -1125,7 +1125,7 @@ if (
         # ----------------------------------------------------
 
         with st.expander(
-            f"📦 {question} — {recommendation}",
+            f"{question} — {recommendation}",
             expanded=False
         ):
 
