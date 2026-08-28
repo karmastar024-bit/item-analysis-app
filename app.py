@@ -13,50 +13,27 @@ from item_analyzer import ItemAnalyzer
 
 
 # ============================================================
-# SAMPLE TEMPLATE GENERATORS
+# SAMPLE TEMPLATE FILES
 # ============================================================
-# These build small, correctly-shaped example workbooks so users
-# can see exactly what column layout the analyzer expects, instead
-# of guessing and uploading a file that crashes the analysis.
+# These are the exact official template workbooks, checked into
+# the repo under templates/. They are served as-is (not generated)
+# so what the user downloads always matches what the analyzer's
+# header-detection logic expects.
 
-@st.cache_data
-def build_answer_key_template():
-
-    df = pd.DataFrame(
-        {
-            "Question": ["Q1", "Q2", "Q3", "Q4", "Q5"],
-            "Correct Answer": ["A", "C", "B", "D", "A"]
-        }
-    )
-
-    output = BytesIO()
-
-    with pd.ExcelWriter(output, engine="openpyxl") as writer:
-        df.to_excel(writer, sheet_name="Answer Key", index=False)
-
-    output.seek(0)
-    return output.getvalue()
+TEMPLATES_DIR = Path(__file__).parent / "templates"
+ANSWER_KEY_TEMPLATE_PATH = TEMPLATES_DIR / "answer_key_template.xlsx"
+STUDENT_TEMPLATE_PATH = TEMPLATES_DIR / "student_response_template.xlsx"
 
 
 @st.cache_data
-def build_student_responses_template():
+def load_template_bytes(path_str):
 
-    df = pd.DataFrame(
-        [
-            ["101", "Alex Kim", "A", "C", "B", "D", "A"],
-            ["102", "Jordan Lee", "A", "B", "B", "D", "C"],
-            ["103", "Sam Patel", "B", "C", "A", "D", "A"],
-        ],
-        columns=["Student ID", "Name", "Q1", "Q2", "Q3", "Q4", "Q5"]
-    )
+    path = Path(path_str)
 
-    output = BytesIO()
+    if not path.exists():
+        return None
 
-    with pd.ExcelWriter(output, engine="openpyxl") as writer:
-        df.to_excel(writer, sheet_name="Student Responses", index=False)
-
-    output.seek(0)
-    return output.getvalue()
+    return path.read_bytes()
 
 
 # ============================================================
@@ -859,95 +836,200 @@ def create_excel_report(results):
 
 
 # ============================================================
-# FILE UPLOAD
+# FILE UPLOAD (click-to-reveal, template-guided)
 # ============================================================
+#
+# Nothing but a single upload button is shown at first. Only once
+# it's clicked does the template instructions + download link +
+# actual uploader appear, so users can't accidentally submit a
+# file before seeing what format is required.
 
 st.markdown(
     "### 📥 Load Test Data"
 )
 
-st.caption(
-    "Files must follow the required template below. Uploading a "
-    "differently structured spreadsheet will be rejected before "
-    "analysis runs, so results are never generated from a "
-    "misread file."
-)
+
+def _init_upload_state(prefix):
+
+    if f"{prefix}_panel_open" not in st.session_state:
+        st.session_state[f"{prefix}_panel_open"] = False
+
+    if f"{prefix}_confirmed_file" not in st.session_state:
+        st.session_state[f"{prefix}_confirmed_file"] = None
+
+
+def render_upload_slot(
+    prefix,
+    label,
+    description_html,
+    template_path,
+    template_download_name
+):
+    """
+    Renders one of the two upload slots (Answer Key / Student
+    Responses) as a click-to-reveal flow:
+
+      1. Just a button, by default.
+      2. Clicking it reveals the template card, download button,
+         file uploader, and a confirm button.
+      3. Once confirmed, collapses to a short "uploaded" summary
+         with a "Change file" option.
+    """
+
+    _init_upload_state(prefix)
+
+    confirmed_file = st.session_state[f"{prefix}_confirmed_file"]
+
+    # ------------------------------------------------------
+    # STATE 1: FILE ALREADY CONFIRMED
+    # ------------------------------------------------------
+
+    if confirmed_file is not None:
+
+        st.success(
+            f"✅ {label}: **{confirmed_file.name}**"
+        )
+
+        if st.button(
+            f"Change {label.lower()} file",
+            key=f"{prefix}_change_btn",
+            use_container_width=True
+        ):
+
+            st.session_state[f"{prefix}_confirmed_file"] = None
+            st.session_state[f"{prefix}_panel_open"] = True
+            st.rerun()
+
+        return confirmed_file
+
+    # ------------------------------------------------------
+    # STATE 2: PANEL CLOSED — SHOW ONLY THE UPLOAD BUTTON
+    # ------------------------------------------------------
+
+    if not st.session_state[f"{prefix}_panel_open"]:
+
+        if st.button(
+            f"📤 Upload {label}",
+            key=f"{prefix}_open_btn",
+            type="primary",
+            use_container_width=True
+        ):
+
+            st.session_state[f"{prefix}_panel_open"] = True
+            st.rerun()
+
+        return None
+
+    # ------------------------------------------------------
+    # STATE 3: PANEL OPEN — TEMPLATE + UPLOADER + CONFIRM
+    # ------------------------------------------------------
+
+    st.markdown(
+        f"""
+<div class="template-card">
+    <div class="template-card-title">
+        {label}
+        <span class="template-required-badge">Template required</span>
+    </div>
+    <div class="template-card-body">
+        {description_html}
+    </div>
+</div>
+""",
+        unsafe_allow_html=True
+    )
+
+    template_bytes = load_template_bytes(str(template_path))
+
+    if template_bytes is not None:
+
+        st.download_button(
+            label=f"⬇️ Download sample {label} template",
+            data=template_bytes,
+            file_name=template_download_name,
+            mime=(
+                "application/vnd.openxmlformats-officedocument."
+                "spreadsheetml.sheet"
+            ),
+            key=f"{prefix}_template_download",
+            use_container_width=True
+        )
+
+    else:
+
+        st.warning(
+            f"Sample template file not found at {template_path}."
+        )
+
+    pending_file = st.file_uploader(
+        f"Upload your {label} spreadsheet (must match the template above)",
+        type=["xlsx", "xls"],
+        key=f"{prefix}_uploader"
+    )
+
+    btn_col, cancel_col = st.columns(2)
+
+    with btn_col:
+
+        submit_clicked = st.button(
+            "Use this file",
+            key=f"{prefix}_submit_btn",
+            type="primary",
+            disabled=pending_file is None,
+            use_container_width=True
+        )
+
+    with cancel_col:
+
+        cancel_clicked = st.button(
+            "Cancel",
+            key=f"{prefix}_cancel_btn",
+            use_container_width=True
+        )
+
+    if submit_clicked and pending_file is not None:
+
+        st.session_state[f"{prefix}_confirmed_file"] = pending_file
+        st.session_state[f"{prefix}_panel_open"] = False
+        st.rerun()
+
+    if cancel_clicked:
+
+        st.session_state[f"{prefix}_panel_open"] = False
+        st.rerun()
+
+    return None
+
 
 col_key, col_data = st.columns(2)
 
 with col_key:
 
-    st.markdown(
-        """
-<div class="template-card">
-    <div class="template-card-title">
-        Answer Key
-        <span class="template-required-badge">Template required</span>
-    </div>
-    <div class="template-card-body">
-        One row per question with a <code>Question</code>
-        column and a <code>Correct Answer</code> column.
-        Answers must be
-        <code>A</code>, <code>B</code>, <code>C</code>, or
-        <code>D</code>.
-    </div>
-</div>
-""",
-        unsafe_allow_html=True
-    )
-
-    st.download_button(
-        label="⬇️ Download sample Answer Key template",
-        data=build_answer_key_template(),
-        file_name="Answer_Key_Template.xlsx",
-        mime=(
-            "application/vnd.openxmlformats-officedocument."
-            "spreadsheetml.sheet"
+    key_file = render_upload_slot(
+        prefix="key",
+        label="Answer Key",
+        description_html=(
+            "One row per question with a <code>Question</code> "
+            "column and a <code>Correct Answer</code> column. "
+            "Answers must be <code>A</code>, <code>B</code>, "
+            "<code>C</code>, or <code>D</code>."
         ),
-        use_container_width=True
-    )
-
-    key_file = st.file_uploader(
-        "Upload your Answer Key Spreadsheet",
-        type=["xlsx", "xls"],
-        key="answer_key"
+        template_path=ANSWER_KEY_TEMPLATE_PATH,
+        template_download_name="Answer_Key_Template.xlsx"
     )
 
 with col_data:
 
-    st.markdown(
-        """
-<div class="template-card">
-    <div class="template-card-title">
-        Student Responses
-        <span class="template-required-badge">Template required</span>
-    </div>
-    <div class="template-card-body">
-        One row per student with <code>Student ID</code> and
-        <code>Name</code> columns, followed by one column per
-        question (<code>Q1, Q2, Q3, ...</code>) matching the
-        Answer Key.
-    </div>
-</div>
-""",
-        unsafe_allow_html=True
-    )
-
-    st.download_button(
-        label="⬇️ Download sample Student Responses template",
-        data=build_student_responses_template(),
-        file_name="Student_Responses_Template.xlsx",
-        mime=(
-            "application/vnd.openxmlformats-officedocument."
-            "spreadsheetml.sheet"
+    data_file = render_upload_slot(
+        prefix="data",
+        label="Student Responses",
+        description_html=(
+            "One row per student with <code>Student ID</code> "
+            "and <code>Name</code> columns, followed by one "
+            "column per question, matching the Answer Key."
         ),
-        use_container_width=True
-    )
-
-    data_file = st.file_uploader(
-        "Upload your Student Responses Spreadsheet",
-        type=["xlsx", "xls"],
-        key="student_data"
+        template_path=STUDENT_TEMPLATE_PATH,
+        template_download_name="Student_Responses_Template.xlsx"
     )
 
 
