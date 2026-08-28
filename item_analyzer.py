@@ -257,102 +257,110 @@ class ItemAnalyzer:
         self.answer_key_labels = {}
 
         # ----------------------------------------------------
-        # FIRST: TRY WIDE FORMAT
-        #
-        # Q1 Q2 Q3 Q4
-        # A  B  C  D
-        # ----------------------------------------------------
-
-        for col in df.columns:
-
-            question_number = normalize_question_label(col)
-
-            if question_number is None:
-                continue
-
-            if len(df) == 0:
-                continue
-
-            answer = normalize_answer(df.iloc[0][col])
-
-            if answer is not None:
-
-                self.answer_key[question_number] = answer
-
-                self.answer_key_labels[
-                    question_number
-                ] = str(col).strip()
-
-        # ----------------------------------------------------
-        # SECOND: TRY VERTICAL FORMAT
+        # ONLY ACCEPTED FORMAT: VERTICAL
         #
         # Question | Correct Answer
         # Q1       | A
         # Q2       | B
         # ----------------------------------------------------
 
-        if not self.answer_key:
+        normalized_columns = {
+            str(c).strip().lower(): c
+            for c in df.columns
+        }
 
-            question_col = None
-            answer_col = None
+        question_candidates = [
+            "question",
+            "question number",
+            "question no",
+            "question_no",
+            "item",
+            "item number",
+            "item no",
+            "q"
+        ]
 
-            normalized_columns = {
-                str(c).strip().lower(): c
-                for c in df.columns
-            }
+        answer_candidates = [
+            "correct answer",
+            "correct",
+            "answer",
+            "key",
+            "correct option"
+        ]
 
-            question_candidates = [
-                "question",
-                "question number",
-                "question no",
-                "question_no",
-                "item",
-                "item number",
-                "item no",
-                "q"
+        question_col = None
+        answer_col = None
+
+        for candidate in question_candidates:
+
+            if candidate in normalized_columns:
+                question_col = normalized_columns[candidate]
+                break
+
+        for candidate in answer_candidates:
+
+            if candidate in normalized_columns:
+                answer_col = normalized_columns[candidate]
+                break
+
+        # ----------------------------------------------------
+        # DETECT A WIDE-FORMAT UPLOAD AND REJECT IT EXPLICITLY
+        #
+        # If the sheet looks like Q1 Q2 Q3 ... across the header
+        # row instead of Question/Correct Answer columns, give a
+        # specific message rather than falling through to the
+        # generic "no questions found" error.
+        # ----------------------------------------------------
+
+        if question_col is None or answer_col is None:
+
+            wide_format_columns = [
+                col for col in df.columns
+                if normalize_question_label(col) is not None
             ]
 
-            answer_candidates = [
-                "correct answer",
-                "correct",
-                "answer",
-                "key",
-                "correct option"
-            ]
+            if wide_format_columns:
 
-            for candidate in question_candidates:
+                raise ValueError(
+                    "This answer key is in the wide format "
+                    "(one column per question), which is no "
+                    "longer accepted.\n\n"
+                    "Please use the vertical format instead: a "
+                    "'Question' column and a 'Correct Answer' "
+                    "column, with one row per question.\n\n"
+                    "Download the sample Answer Key template to "
+                    "see the required layout."
+                )
 
-                if candidate in normalized_columns:
-                    question_col = normalized_columns[candidate]
-                    break
+            raise ValueError(
+                "Could not find the required columns in the "
+                "answer key.\n\n"
+                "The sheet must contain a 'Question' column and "
+                "a 'Correct Answer' column, with one row per "
+                "question.\n\n"
+                "Download the sample Answer Key template to see "
+                "the required layout."
+            )
 
-            for candidate in answer_candidates:
+        for _, row in df.iterrows():
 
-                if candidate in normalized_columns:
-                    answer_col = normalized_columns[candidate]
-                    break
+            question_number = normalize_question_label(
+                row[question_col]
+            )
 
-            if question_col is not None and answer_col is not None:
+            answer = normalize_answer(
+                row[answer_col]
+            )
 
-                for _, row in df.iterrows():
+            if question_number is not None and answer is not None:
 
-                    question_number = normalize_question_label(
-                        row[question_col]
-                    )
+                self.answer_key[question_number] = answer
 
-                    answer = normalize_answer(
-                        row[answer_col]
-                    )
-
-                    if question_number is not None and answer is not None:
-
-                        self.answer_key[question_number] = answer
-
-                        self.answer_key_labels[
-                            question_number
-                        ] = str(
-                            row[question_col]
-                        ).strip()
+                self.answer_key_labels[
+                    question_number
+                ] = str(
+                    row[question_col]
+                ).strip()
 
         # ----------------------------------------------------
         # VALIDATION
