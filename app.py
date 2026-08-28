@@ -13,6 +13,53 @@ from item_analyzer import ItemAnalyzer
 
 
 # ============================================================
+# SAMPLE TEMPLATE GENERATORS
+# ============================================================
+# These build small, correctly-shaped example workbooks so users
+# can see exactly what column layout the analyzer expects, instead
+# of guessing and uploading a file that crashes the analysis.
+
+@st.cache_data
+def build_answer_key_template():
+
+    df = pd.DataFrame(
+        {
+            "Question": ["Q1", "Q2", "Q3", "Q4", "Q5"],
+            "Correct Answer": ["A", "C", "B", "D", "A"]
+        }
+    )
+
+    output = BytesIO()
+
+    with pd.ExcelWriter(output, engine="openpyxl") as writer:
+        df.to_excel(writer, sheet_name="Answer Key", index=False)
+
+    output.seek(0)
+    return output.getvalue()
+
+
+@st.cache_data
+def build_student_responses_template():
+
+    df = pd.DataFrame(
+        [
+            ["101", "Alex Kim", "A", "C", "B", "D", "A"],
+            ["102", "Jordan Lee", "A", "B", "B", "D", "C"],
+            ["103", "Sam Patel", "B", "C", "A", "D", "A"],
+        ],
+        columns=["Student ID", "Name", "Q1", "Q2", "Q3", "Q4", "Q5"]
+    )
+
+    output = BytesIO()
+
+    with pd.ExcelWriter(output, engine="openpyxl") as writer:
+        df.to_excel(writer, sheet_name="Student Responses", index=False)
+
+    output.seek(0)
+    return output.getvalue()
+
+
+# ============================================================
 # PAGE CONFIGURATION
 # ============================================================
 
@@ -125,53 +172,59 @@ h1, h2, h3 {
     color: #65728A;
 }
 
-/* ========================================================
-   UPLOAD PAGE
-   ======================================================== */
-
-.upload-card {
-    background: #EEF1F5;
-    border-radius: 8px;
-    min-height: 122px;
-    padding: 18px 16px 14px 16px;
-    box-sizing: border-box;
-    margin-bottom: 8px;
+.template-card {
+    background-color: #FFFFFF;
+    border: 1px solid #DEE4EF;
+    border-radius: 12px;
+    padding: 18px 20px;
+    margin-bottom: 10px;
 }
 
-.upload-label {
-    color: #29313F;
+.template-card-title {
     font-size: 14px;
-    line-height: 1.4;
-    margin-bottom: 18px;
+    font-weight: 700;
+    color: #16233E;
+    margin-bottom: 6px;
 }
 
-.upload-meta {
-    color: #8992A2;
+.template-card-body {
     font-size: 13px;
-}
-
-.upload-instructions {
-    background: #DCE8FA;
-    border-radius: 8px;
-    padding: 14px 16px;
-    margin: 8px 0 10px 0;
-    color: #0057A8;
-}
-
-.instruction-title {
-    font-size: 14px;
+    color: #4B5875;
     line-height: 1.5;
+}
+
+.template-required-badge {
+    display: inline-block;
+    background-color: #E6F1FB;
+    color: #185FA5;
+    font-size: 10px;
+    font-weight: 700;
+    text-transform: uppercase;
+    padding: 3px 10px;
+    border-radius: 20px;
+    margin-left: 8px;
+}
+
+.template-error-card {
+    background-color: #FAE7E5;
+    border: 1px solid #F0C4BE;
+    border-radius: 12px;
+    padding: 16px 20px;
+    margin: 10px 0;
+}
+
+.template-error-title {
+    font-size: 14px;
+    font-weight: 700;
+    color: #B23A32;
     margin-bottom: 4px;
 }
 
-.instruction-text {
+.template-error-body {
     font-size: 13px;
-    line-height: 1.55;
-    color: #145A9C;
-}
-
-.upload-instructions b {
-    color: #004E97;
+    color: #7A2A22;
+    line-height: 1.5;
+    white-space: pre-line;
 }
 
 </style>
@@ -809,208 +862,94 @@ def create_excel_report(results):
 # FILE UPLOAD
 # ============================================================
 
-# The upload page intentionally starts with two simple cards, matching
-# the visual structure in the reference screenshot. Clicking an Upload
-# button reveals the appropriate instructions, template download and
-# file picker.
-
-TEMPLATE_DIR = Path(__file__).resolve().parent / "templates"
-ANSWER_KEY_TEMPLATE = TEMPLATE_DIR / "answer_key_template.xlsx"
-STUDENT_RESPONSE_TEMPLATE = TEMPLATE_DIR / "student_response_template.xlsx"
-
-
-# ------------------------------------------------------------
-# SESSION STATE
-# ------------------------------------------------------------
-
-if "show_answer_key_upload" not in st.session_state:
-    st.session_state["show_answer_key_upload"] = False
-
-if "show_student_upload" not in st.session_state:
-    st.session_state["show_student_upload"] = False
-
-
-# ------------------------------------------------------------
-# TEMPLATE DOWNLOAD HELPER
-# ------------------------------------------------------------
-
-def template_download_button(
-    template_path,
-    file_name,
-    button_key
-):
-    """Render a Streamlit download button for a template file."""
-
-    if not template_path.exists():
-        st.warning(
-            f"Template file not found: {file_name}"
-        )
-        return
-
-    with open(template_path, "rb") as template_file:
-        template_bytes = template_file.read()
-
-    st.download_button(
-        label=f"📥 Download {file_name}",
-        data=template_bytes,
-        file_name=file_name,
-        mime=(
-            "application/vnd.openxmlformats-officedocument."
-            "spreadsheetml.sheet"
-        ),
-        key=button_key,
-        use_container_width=False
-    )
-
-
-# ------------------------------------------------------------
-# PAGE TITLE
-# ------------------------------------------------------------
-
 st.markdown(
     "### 📥 Load Test Data"
 )
 
-col_key, col_data = st.columns(2, gap="medium")
+st.caption(
+    "Files must follow the required template below. Uploading a "
+    "differently structured spreadsheet will be rejected before "
+    "analysis runs, so results are never generated from a "
+    "misread file."
+)
 
-
-# ============================================================
-# ANSWER KEY CARD
-# ============================================================
+col_key, col_data = st.columns(2)
 
 with col_key:
 
     st.markdown(
-        "<div class='upload-card'>"
-        "<div class='upload-label'>Choose Answer Key Spreadsheet</div>"
-        "<div class='upload-meta'>200MB per file • XLSX, XLS</div>"
-        "</div>",
+        """
+<div class="template-card">
+    <div class="template-card-title">
+        Answer Key
+        <span class="template-required-badge">Template required</span>
+    </div>
+    <div class="template-card-body">
+        One row per question with a <code>Question</code>
+        column and a <code>Correct Answer</code> column.
+        Answers must be
+        <code>A</code>, <code>B</code>, <code>C</code>, or
+        <code>D</code>.
+    </div>
+</div>
+""",
         unsafe_allow_html=True
     )
 
-    if st.button(
-        "⇧  Upload",
-        key="answer_key_upload_button",
-        use_container_width=False
-    ):
-        st.session_state["show_answer_key_upload"] = True
+    st.download_button(
+        label="⬇️ Download sample Answer Key template",
+        data=build_answer_key_template(),
+        file_name="Answer_Key_Template.xlsx",
+        mime=(
+            "application/vnd.openxmlformats-officedocument."
+            "spreadsheetml.sheet"
+        ),
+        use_container_width=True
+    )
 
-    if st.session_state["show_answer_key_upload"]:
-
-        st.markdown(
-            "<div class='upload-instructions'>"
-            "<div class='instruction-title'>💡 Please upload your Answer Key.</div>"
-            "<div class='instruction-text'>"
-            "Your answer key must match the template shown in "
-            "<b>answer_key_template</b>. Please download the template "
-            "and make sure your Excel file follows the same structure."
-            "</div>"
-            "</div>",
-            unsafe_allow_html=True
-        )
-
-        template_download_button(
-            ANSWER_KEY_TEMPLATE,
-            "answer_key_template.xlsx",
-            "download_answer_key_template"
-        )
-
-        key_file = st.file_uploader(
-            "Upload your Answer Key",
-            type=["xlsx", "xls"],
-            key="answer_key",
-            help="Upload the completed answer_key_template.xlsx file."
-        )
-
-    else:
-        key_file = None
-
-
-# ============================================================
-# STUDENT RESPONSE CARD
-# ============================================================
+    key_file = st.file_uploader(
+        "Upload your Answer Key Spreadsheet",
+        type=["xlsx", "xls"],
+        key="answer_key"
+    )
 
 with col_data:
 
     st.markdown(
-        "<div class='upload-card'>"
-        "<div class='upload-label'>Choose Student Responses Spreadsheet</div>"
-        "<div class='upload-meta'>200MB per file • XLSX, XLS</div>"
-        "</div>",
+        """
+<div class="template-card">
+    <div class="template-card-title">
+        Student Responses
+        <span class="template-required-badge">Template required</span>
+    </div>
+    <div class="template-card-body">
+        One row per student with <code>Student ID</code> and
+        <code>Name</code> columns, followed by one column per
+        question (<code>Q1, Q2, Q3, ...</code>) matching the
+        Answer Key.
+    </div>
+</div>
+""",
         unsafe_allow_html=True
     )
 
-    if st.button(
-        "⇧  Upload",
-        key="student_upload_button",
-        use_container_width=False
-    ):
-        st.session_state["show_student_upload"] = True
-
-    if st.session_state["show_student_upload"]:
-
-        st.markdown(
-            "<div class='upload-instructions'>"
-            "<div class='instruction-title'>💡 Please upload Student Responses.</div>"
-            "<div class='instruction-text'>"
-            "Your student response file must match the template shown in "
-            "<b>student_response_template</b>. Please download the template "
-            "and make sure your Excel file follows the same structure."
-            "</div>"
-            "</div>",
-            unsafe_allow_html=True
-        )
-
-        template_download_button(
-            STUDENT_RESPONSE_TEMPLATE,
-            "student_response_template.xlsx",
-            "download_student_response_template"
-        )
-
-        data_file = st.file_uploader(
-            "Upload your Student Responses",
-            type=["xlsx", "xls"],
-            key="student_data",
-            help="Upload the completed student_response_template.xlsx file."
-        )
-
-    else:
-        data_file = None
-
-
-# ------------------------------------------------------------
-# STATUS / ANALYSIS ACCESS
-# ------------------------------------------------------------
-
-if key_file or data_file:
-
-    uploaded_col1, uploaded_col2 = st.columns(2)
-
-    with uploaded_col1:
-
-        if key_file:
-            st.success(
-                f"✓ Answer Key selected: {key_file.name}"
-            )
-
-    with uploaded_col2:
-
-        if data_file:
-            st.success(
-                f"✓ Student Responses selected: {data_file.name}"
-            )
-
-
-if key_file and data_file:
-
-    st.markdown("<div style='height: 8px'></div>", unsafe_allow_html=True)
-
-else:
-
-    st.info(
-        "💡 Please upload both the Answer Key and Student "
-        "Responses Excel files to unlock the analysis dashboard."
+    st.download_button(
+        label="⬇️ Download sample Student Responses template",
+        data=build_student_responses_template(),
+        file_name="Student_Responses_Template.xlsx",
+        mime=(
+            "application/vnd.openxmlformats-officedocument."
+            "spreadsheetml.sheet"
+        ),
+        use_container_width=True
     )
+
+    data_file = st.file_uploader(
+        "Upload your Student Responses Spreadsheet",
+        type=["xlsx", "xls"],
+        key="student_data"
+    )
+
 
 # ============================================================
 # ANALYSIS
@@ -1087,6 +1026,26 @@ if key_file and data_file:
 
                 st.success(
                     "✅ Analysis completed successfully."
+                )
+
+            except ValueError as e:
+
+                st.markdown(
+                    f"""
+<div class="template-error-card">
+    <div class="template-error-title">
+        ⚠️ File doesn't match the required template
+    </div>
+    <div class="template-error-body">{html.escape(str(e))}</div>
+</div>
+""",
+                    unsafe_allow_html=True
+                )
+
+                st.caption(
+                    "Download the sample templates above, fill in "
+                    "your data using the same columns, and "
+                    "re-upload."
                 )
 
             except Exception as e:
@@ -1925,3 +1884,13 @@ if (
         )
 
 
+# ============================================================
+# UPLOAD REMINDER
+# ============================================================
+
+else:
+
+    st.info(
+        "💡 Please upload both the Answer Key and Student "
+        "Responses Excel files to unlock the analysis dashboard."
+    )
