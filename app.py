@@ -5,7 +5,6 @@ from dataclasses import asdict, is_dataclass
 from enum import Enum
 from io import BytesIO
 from pathlib import Path
-import base64
 
 import pandas as pd
 import streamlit as st
@@ -16,14 +15,7 @@ from item_analyzer import ItemAnalyzer
 # ============================================================
 # PAGE CONFIGURATION
 # ============================================================
-def image_data_url(path: str) -> str:
-    encoded = base64.b64encode(
-        Path(path).read_bytes()
-    ).decode("utf-8")
-    return f"data:image/jpeg;base64,{encoded}"
 
-
-background_image = image_data_url("assets/motithang-hss.jpg")
 st.set_page_config(
     page_title="Item Analysis",
     page_icon="",
@@ -133,28 +125,58 @@ h1, h2, h3 {
     color: #65728A;
 }
 
+/* ========================================================
+   UPLOAD PAGE
+   ======================================================== */
+
+.upload-card {
+    background: #EEF1F5;
+    border-radius: 8px;
+    min-height: 122px;
+    padding: 18px 16px 14px 16px;
+    box-sizing: border-box;
+    margin-bottom: 8px;
+}
+
+.upload-label {
+    color: #29313F;
+    font-size: 14px;
+    line-height: 1.4;
+    margin-bottom: 18px;
+}
+
+.upload-meta {
+    color: #8992A2;
+    font-size: 13px;
+}
+
+.upload-instructions {
+    background: #DCE8FA;
+    border-radius: 8px;
+    padding: 14px 16px;
+    margin: 8px 0 10px 0;
+    color: #0057A8;
+}
+
+.instruction-title {
+    font-size: 14px;
+    line-height: 1.5;
+    margin-bottom: 4px;
+}
+
+.instruction-text {
+    font-size: 13px;
+    line-height: 1.55;
+    color: #145A9C;
+}
+
+.upload-instructions b {
+    color: #004E97;
+}
+
 </style>
 """,
     unsafe_allow_html=True
-)
-
-st.markdown(
-    f"""
-<style>
-[data-testid="stAppViewContainer"] {{
-    background-image:
-        linear-gradient(
-            rgba(243, 245, 248, 0.78),
-            rgba(243, 245, 248, 0.78)
-        ),
-        url("data:image/jpeg;base64,{background_image}") !important;
-    background-size: cover !important;
-    background-position: center !important;
-    background-attachment: fixed !important;
-}}
-</style>
-""",
-    unsafe_allow_html=True,
 )
 
 
@@ -787,28 +809,208 @@ def create_excel_report(results):
 # FILE UPLOAD
 # ============================================================
 
+# The upload page intentionally starts with two simple cards, matching
+# the visual structure in the reference screenshot. Clicking an Upload
+# button reveals the appropriate instructions, template download and
+# file picker.
+
+TEMPLATE_DIR = Path(__file__).resolve().parent / "templates"
+ANSWER_KEY_TEMPLATE = TEMPLATE_DIR / "answer_key_template.xlsx"
+STUDENT_RESPONSE_TEMPLATE = TEMPLATE_DIR / "student_response_template.xlsx"
+
+
+# ------------------------------------------------------------
+# SESSION STATE
+# ------------------------------------------------------------
+
+if "show_answer_key_upload" not in st.session_state:
+    st.session_state["show_answer_key_upload"] = False
+
+if "show_student_upload" not in st.session_state:
+    st.session_state["show_student_upload"] = False
+
+
+# ------------------------------------------------------------
+# TEMPLATE DOWNLOAD HELPER
+# ------------------------------------------------------------
+
+def template_download_button(
+    template_path,
+    file_name,
+    button_key
+):
+    """Render a Streamlit download button for a template file."""
+
+    if not template_path.exists():
+        st.warning(
+            f"Template file not found: {file_name}"
+        )
+        return
+
+    with open(template_path, "rb") as template_file:
+        template_bytes = template_file.read()
+
+    st.download_button(
+        label=f"📥 Download {file_name}",
+        data=template_bytes,
+        file_name=file_name,
+        mime=(
+            "application/vnd.openxmlformats-officedocument."
+            "spreadsheetml.sheet"
+        ),
+        key=button_key,
+        use_container_width=False
+    )
+
+
+# ------------------------------------------------------------
+# PAGE TITLE
+# ------------------------------------------------------------
+
 st.markdown(
     "### 📥 Load Test Data"
 )
 
-col_key, col_data = st.columns(2)
+col_key, col_data = st.columns(2, gap="medium")
+
+
+# ============================================================
+# ANSWER KEY CARD
+# ============================================================
 
 with col_key:
 
-    key_file = st.file_uploader(
-        "Choose Answer Key Spreadsheet",
-        type=["xlsx", "xls"],
-        key="answer_key"
+    st.markdown(
+        "<div class='upload-card'>"
+        "<div class='upload-label'>Choose Answer Key Spreadsheet</div>"
+        "<div class='upload-meta'>200MB per file • XLSX, XLS</div>"
+        "</div>",
+        unsafe_allow_html=True
     )
+
+    if st.button(
+        "⇧  Upload",
+        key="answer_key_upload_button",
+        use_container_width=False
+    ):
+        st.session_state["show_answer_key_upload"] = True
+
+    if st.session_state["show_answer_key_upload"]:
+
+        st.markdown(
+            "<div class='upload-instructions'>"
+            "<div class='instruction-title'>💡 Please upload your Answer Key.</div>"
+            "<div class='instruction-text'>"
+            "Your answer key must match the template shown in "
+            "<b>answer_key_template</b>. Please download the template "
+            "and make sure your Excel file follows the same structure."
+            "</div>"
+            "</div>",
+            unsafe_allow_html=True
+        )
+
+        template_download_button(
+            ANSWER_KEY_TEMPLATE,
+            "answer_key_template.xlsx",
+            "download_answer_key_template"
+        )
+
+        key_file = st.file_uploader(
+            "Upload your Answer Key",
+            type=["xlsx", "xls"],
+            key="answer_key",
+            help="Upload the completed answer_key_template.xlsx file."
+        )
+
+    else:
+        key_file = None
+
+
+# ============================================================
+# STUDENT RESPONSE CARD
+# ============================================================
 
 with col_data:
 
-    data_file = st.file_uploader(
-        "Choose Student Responses Spreadsheet",
-        type=["xlsx", "xls"],
-        key="student_data"
+    st.markdown(
+        "<div class='upload-card'>"
+        "<div class='upload-label'>Choose Student Responses Spreadsheet</div>"
+        "<div class='upload-meta'>200MB per file • XLSX, XLS</div>"
+        "</div>",
+        unsafe_allow_html=True
     )
 
+    if st.button(
+        "⇧  Upload",
+        key="student_upload_button",
+        use_container_width=False
+    ):
+        st.session_state["show_student_upload"] = True
+
+    if st.session_state["show_student_upload"]:
+
+        st.markdown(
+            "<div class='upload-instructions'>"
+            "<div class='instruction-title'>💡 Please upload Student Responses.</div>"
+            "<div class='instruction-text'>"
+            "Your student response file must match the template shown in "
+            "<b>student_response_template</b>. Please download the template "
+            "and make sure your Excel file follows the same structure."
+            "</div>"
+            "</div>",
+            unsafe_allow_html=True
+        )
+
+        template_download_button(
+            STUDENT_RESPONSE_TEMPLATE,
+            "student_response_template.xlsx",
+            "download_student_response_template"
+        )
+
+        data_file = st.file_uploader(
+            "Upload your Student Responses",
+            type=["xlsx", "xls"],
+            key="student_data",
+            help="Upload the completed student_response_template.xlsx file."
+        )
+
+    else:
+        data_file = None
+
+
+# ------------------------------------------------------------
+# STATUS / ANALYSIS ACCESS
+# ------------------------------------------------------------
+
+if key_file or data_file:
+
+    uploaded_col1, uploaded_col2 = st.columns(2)
+
+    with uploaded_col1:
+
+        if key_file:
+            st.success(
+                f"✓ Answer Key selected: {key_file.name}"
+            )
+
+    with uploaded_col2:
+
+        if data_file:
+            st.success(
+                f"✓ Student Responses selected: {data_file.name}"
+            )
+
+
+if key_file and data_file:
+
+    st.markdown("<div style='height: 8px'></div>", unsafe_allow_html=True)
+
+else:
+
+    st.info(
+        "💡 Please upload both the Answer Key and Student "
+        "Responses Excel files to unlock the analysis dashboard."
+    )
 
 # ============================================================
 # ANALYSIS
@@ -1723,13 +1925,3 @@ if (
         )
 
 
-# ============================================================
-# UPLOAD REMINDER
-# ============================================================
-
-else:
-
-    st.info(
-        "💡 Please upload both the Answer Key and Student "
-        "Responses Excel files to unlock the analysis dashboard."
-    )
