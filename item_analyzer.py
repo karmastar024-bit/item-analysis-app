@@ -213,6 +213,143 @@ def normalize_answer(value):
 
 
 # ============================================================
+# HEADER ROW DETECTION
+# ============================================================
+#
+# The official templates include a title banner and instructions
+# above the real header row, so the header can't be assumed to be
+# row 0. These helpers scan the top of the sheet to locate it.
+
+def _normalize_header_text(value):
+
+    text = re.sub(
+        r"[\s_\-]+",
+        " ",
+        str(value).strip().lower()
+    )
+
+    return text
+
+
+def _find_vertical_answer_key_header(raw_df, max_scan_rows=15):
+    """
+    Scan the top of the answer key sheet for the row containing
+    both a 'Question' style column and a 'Correct Answer' style
+    column (exact match after whitespace normalization).
+
+    Returns (header_row_index, question_col_idx, answer_col_idx)
+    or (None, None, None) if not found.
+    """
+
+    question_candidates = {
+        "question",
+        "question number",
+        "question no",
+        "item",
+        "item number",
+        "item no",
+        "q"
+    }
+
+    answer_candidates = {
+        "correct answer",
+        "correct",
+        "answer",
+        "key",
+        "correct option"
+    }
+
+    scan_limit = min(max_scan_rows, len(raw_df))
+
+    for row_idx in range(scan_limit):
+
+        row = raw_df.iloc[row_idx]
+
+        question_col = None
+        answer_col = None
+
+        for col_idx, value in row.items():
+
+            if value is None or str(value).strip() == "":
+                continue
+
+            text = _normalize_header_text(value)
+
+            if question_col is None and text in question_candidates:
+                question_col = col_idx
+
+            if answer_col is None and text in answer_candidates:
+                answer_col = col_idx
+
+        if question_col is not None and answer_col is not None:
+            return row_idx, question_col, answer_col
+
+    return None, None, None
+
+
+def _detect_wide_format_answer_key(raw_df, max_scan_rows=5):
+    """
+    Look for a header row that instead looks like the (no longer
+    accepted) wide format: Q1, Q2, Q3, ... spread across columns.
+    """
+
+    scan_limit = min(max_scan_rows, len(raw_df))
+
+    for row_idx in range(scan_limit):
+
+        row = raw_df.iloc[row_idx]
+
+        question_like_columns = [
+            col_idx
+            for col_idx, value in row.items()
+            if value is not None
+            and normalize_question_label(value) is not None
+        ]
+
+        if len(question_like_columns) >= 2:
+            return True
+
+    return False
+
+
+def _find_student_response_header(raw_df, max_scan_rows=30):
+    """
+    Scan the top of the student response sheet for the header row:
+    the row that contains a student-name-style column together
+    with at least one question-numbered column.
+
+    Returns the header row index, or None if not found.
+    """
+
+    scan_limit = min(max_scan_rows, len(raw_df))
+
+    for row_idx in range(scan_limit):
+
+        row = raw_df.iloc[row_idx]
+
+        has_name_cue = False
+        question_col_count = 0
+
+        for value in row.values:
+
+            if value is None or str(value).strip() == "":
+                continue
+
+            text = _normalize_header_text(value)
+
+            if "name" in text:
+                has_name_cue = True
+
+            if normalize_question_label(value) is not None:
+                question_col_count += 1
+
+        if has_name_cue and question_col_count >= 1:
+            return row_idx
+
+    return None
+
+
+# ============================================================
 # ITEM ANALYZER
 # ============================================================
 
@@ -242,13 +379,16 @@ class ItemAnalyzer:
 
         sheet_name = xl_file.sheet_names[0]
 
-        df = pd.read_excel(
+        # Read with no assumed header, since the official template
+        # has a title banner and instructions above the real
+        # 'Question' / 'Correct Answer' header row.
+        raw_df = pd.read_excel(
             excel_file,
             sheet_name=sheet_name,
-            header=0
+            header=None
         )
 
-        if df.empty and len(df.columns) == 0:
+        if raw_df.empty and len(raw_df.columns) == 0:
             raise ValueError(
                 "The answer key sheet is empty."
             )
@@ -264,62 +404,22 @@ class ItemAnalyzer:
         # Q2       | B
         # ----------------------------------------------------
 
-        normalized_columns = {
-            str(c).strip().lower(): c
-            for c in df.columns
-        }
-
-        question_candidates = [
-            "question",
-            "question number",
-            "question no",
-            "question_no",
-            "item",
-            "item number",
-            "item no",
-            "q"
-        ]
-
-        answer_candidates = [
-            "correct answer",
-            "correct",
-            "answer",
-            "key",
-            "correct option"
-        ]
-
-        question_col = None
-        answer_col = None
-
-        for candidate in question_candidates:
-
-            if candidate in normalized_columns:
-                question_col = normalized_columns[candidate]
-                break
-
-        for candidate in answer_candidates:
-
-            if candidate in normalized_columns:
-                answer_col = normalized_columns[candidate]
-                break
+        header_row_idx, question_col, answer_col = (
+            _find_vertical_answer_key_header(raw_df)
+        )
 
         # ----------------------------------------------------
         # DETECT A WIDE-FORMAT UPLOAD AND REJECT IT EXPLICITLY
         #
-        # If the sheet looks like Q1 Q2 Q3 ... across the header
+        # If the sheet looks like Q1 Q2 Q3 ... across a header
         # row instead of Question/Correct Answer columns, give a
         # specific message rather than falling through to the
         # generic "no questions found" error.
         # ----------------------------------------------------
 
-        if question_col is None or answer_col is None:
+        if header_row_idx is None:
 
-            wide_format_columns = [
-                col for col in df.columns
-                if normalize_question_label(col) is not None
-            ]
-
-            if wide_format_columns:
+            if _detect_wide_format_answer_key(raw_df):
 
                 raise ValueError(
                     "This answer key is in the wide format "
@@ -342,7 +442,9 @@ class ItemAnalyzer:
                 "the required layout."
             )
 
-        for _, row in df.iterrows():
+        data_rows = raw_df.iloc[header_row_idx + 1:]
+
+        for _, row in data_rows.iterrows():
 
             question_number = normalize_question_label(
                 row[question_col]
@@ -407,11 +509,38 @@ class ItemAnalyzer:
 
         sheet_name = xl_file.sheet_names[0]
 
-        df = pd.read_excel(
+        # Read with no assumed header, since the official template
+        # has an exam-information banner above the real header row
+        # (Student ID / Name of the Student / ... / 1 / 2 / 3 ...).
+        raw_df = pd.read_excel(
             excel_file,
             sheet_name=sheet_name,
-            header=0
+            header=None
         )
+
+        if raw_df.empty:
+
+            raise ValueError(
+                "The student response sheet contains no student records."
+            )
+
+        header_row_idx = _find_student_response_header(raw_df)
+
+        if header_row_idx is None:
+
+            raise ValueError(
+                "Could not find the required header row in the "
+                "student response sheet.\n\n"
+                "The sheet must contain a student Name column "
+                "followed by one column per question, matching "
+                "the answer key.\n\n"
+                "Download the sample Student Responses template "
+                "to see the required layout."
+            )
+
+        header_row = raw_df.iloc[header_row_idx]
+
+        df = raw_df.iloc[header_row_idx + 1:].reset_index(drop=True)
 
         if df.empty:
 
@@ -425,15 +554,21 @@ class ItemAnalyzer:
 
         normalized = {}
 
-        for col in df.columns:
+        for col in raw_df.columns:
+
+            value = header_row[col]
+
+            if value is None or str(value).strip() == "":
+                continue
 
             key = re.sub(
                 r"[\s_\-]+",
                 " ",
-                str(col).strip().lower()
+                str(value).strip().lower()
             )
 
-            normalized[key] = col
+            if key not in normalized:
+                normalized[key] = col
 
         id_candidates = [
             "student id",
@@ -494,9 +629,11 @@ class ItemAnalyzer:
         if name_col is None:
 
             # Look for a column containing "name"
-            for col in df.columns:
+            for col in raw_df.columns:
 
-                if "name" in str(col).lower():
+                value = header_row[col]
+
+                if value is not None and "name" in str(value).lower():
 
                     name_col = col
                     break
@@ -504,9 +641,14 @@ class ItemAnalyzer:
         if id_col is None:
 
             # Look for roll/student/id
-            for col in df.columns:
+            for col in raw_df.columns:
 
-                lower = str(col).lower()
+                value = header_row[col]
+
+                if value is None:
+                    continue
+
+                lower = str(value).lower()
 
                 if (
                     "student" in lower
@@ -531,9 +673,11 @@ class ItemAnalyzer:
 
         question_columns = {}
 
-        for col in df.columns:
+        for col in raw_df.columns:
 
-            question_number = normalize_question_label(col)
+            value = header_row[col]
+
+            question_number = normalize_question_label(value)
 
             if question_number is None:
                 continue
