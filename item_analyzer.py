@@ -350,6 +350,111 @@ def _find_student_response_header(raw_df, max_scan_rows=30):
 
 
 # ============================================================
+# EXAM INFO BANNER
+# ============================================================
+#
+# The official student response template has an optional
+# "EXAM INFORMATION" banner above the real header row, e.g.:
+#
+#   EXAM INFORMATION
+#
+#   Examination Name :   Mid-Term Examination
+#   Examination Year :   2026
+#   Class :
+#   Subject :
+#
+# This is scanned out here (independent of the header-row
+# detection) so it can be carried through to the analysis
+# results and stamped onto the downloaded report.
+
+EXAM_INFO_FIELD_LOOKUP = {
+    "examination name": "Examination Name",
+    "exam name": "Examination Name",
+    "examination title": "Examination Name",
+    "examination year": "Examination Year",
+    "exam year": "Examination Year",
+    "year": "Examination Year",
+    "class": "Class",
+    "grade": "Class",
+    "section": "Class",
+    "class section": "Class",
+    "subject": "Subject",
+    "course": "Subject",
+}
+
+EXAM_INFO_FIELDS = [
+    "Examination Name",
+    "Examination Year",
+    "Class",
+    "Subject"
+]
+
+
+def _extract_exam_info(raw_df, header_row_idx):
+    """
+    Scan the rows above the detected header row for label/value
+    pairs matching the exam-information banner fields. Returns a
+    dict with all of EXAM_INFO_FIELDS present, defaulting to ""
+    for anything not found or left blank by the user.
+    """
+
+    exam_info = {
+        field: ""
+        for field in EXAM_INFO_FIELDS
+    }
+
+    if header_row_idx is None:
+        scan_limit = len(raw_df)
+    else:
+        scan_limit = min(header_row_idx, len(raw_df))
+
+    for row_idx in range(scan_limit):
+
+        row = raw_df.iloc[row_idx]
+
+        row_values = [
+            value
+            for value in row.values
+            if value is not None
+            and not pd.isna(value)
+            and str(value).strip() != ""
+        ]
+
+        if not row_values:
+            continue
+
+        label_raw = str(row_values[0]).strip()
+
+        label_clean = re.sub(
+            r"[:\s]+$",
+            "",
+            label_raw
+        ).strip().lower()
+
+        label_clean = re.sub(
+            r"[\s_\-]+",
+            " ",
+            label_clean
+        )
+
+        if label_clean not in EXAM_INFO_FIELD_LOOKUP:
+            continue
+
+        field_name = EXAM_INFO_FIELD_LOOKUP[label_clean]
+
+        if len(row_values) >= 2:
+            value = str(row_values[1]).strip()
+        else:
+            value = ""
+
+        # Keep the first non-blank value found for each field.
+        if value and not exam_info[field_name]:
+            exam_info[field_name] = value
+
+    return exam_info
+
+
+# ============================================================
 # ITEM ANALYZER
 # ============================================================
 
@@ -365,6 +470,11 @@ class ItemAnalyzer:
 
         self.total_students = 0
         self.total_questions = 0
+
+        self.exam_info = {
+            field: ""
+            for field in EXAM_INFO_FIELDS
+        }
 
     # ========================================================
     # LOAD ANSWER KEY
@@ -537,6 +647,11 @@ class ItemAnalyzer:
                 "Download the sample Student Responses template "
                 "to see the required layout."
             )
+
+        self.exam_info = _extract_exam_info(
+            raw_df,
+            header_row_idx
+        )
 
         header_row = raw_df.iloc[header_row_idx]
 
@@ -870,10 +985,11 @@ class ItemAnalyzer:
 
         if self.total_questions > 0:
 
-            self.student_data["percentage"] = (
+            self.student_data["percentage"] = np.round(
                 self.scores
                 / self.total_questions
-                * 100
+                * 100,
+                1
             )
 
         else:
@@ -1021,31 +1137,45 @@ class ItemAnalyzer:
             # ------------------------------------------------
             # DIFFICULTY
             # ------------------------------------------------
+            #
+            # Status/recommendation logic below always uses the
+            # raw (unrounded) value, so rounding to 1 decimal for
+            # display never shifts an item across a threshold.
 
-            difficulty = (
+            difficulty_raw = (
                 correct_count
                 / self.total_students
+            )
+
+            difficulty = round(
+                difficulty_raw,
+                1
             )
 
             # ------------------------------------------------
             # DISCRIMINATION
             # ------------------------------------------------
 
-            discrimination = (
+            discrimination_raw = (
                 upper_correct / group_size
             ) - (
                 lower_correct / group_size
+            )
+
+            discrimination = round(
+                discrimination_raw,
+                1
             )
 
             # ------------------------------------------------
             # DIFFICULTY STATUS
             # ------------------------------------------------
 
-            if difficulty < 0.20:
+            if difficulty_raw < 0.20:
 
                 difficulty_status = "Very Difficult"
 
-            elif difficulty > 0.80:
+            elif difficulty_raw > 0.80:
 
                 difficulty_status = "Too Easy"
 
@@ -1057,15 +1187,15 @@ class ItemAnalyzer:
             # DISCRIMINATION STATUS
             # ------------------------------------------------
 
-            if discrimination < 0:
+            if discrimination_raw < 0:
 
                 discrimination_status = "Negative"
 
-            elif discrimination < 0.20:
+            elif discrimination_raw < 0.20:
 
                 discrimination_status = "Poor"
 
-            elif discrimination < 0.30:
+            elif discrimination_raw < 0.30:
 
                 discrimination_status = "Fair"
 
@@ -1122,10 +1252,15 @@ class ItemAnalyzer:
                     option
                 ]
 
-                percentage = (
+                percentage_raw = (
                     count
                     / self.total_students
                     * 100
+                )
+
+                percentage = round(
+                    percentage_raw,
+                    1
                 )
 
                 is_correct = (
@@ -1142,7 +1277,7 @@ class ItemAnalyzer:
                     distractor_total += 1
 
                     is_functional = (
-                        percentage
+                        percentage_raw
                         >= (
                             NON_FUNCTIONAL_THRESHOLD
                             * 100
@@ -1177,10 +1312,11 @@ class ItemAnalyzer:
 
             if distractor_total > 0:
 
-                distractor_efficiency = (
+                distractor_efficiency = round(
                     functional_distractor_count
                     / distractor_total
-                    * 100
+                    * 100,
+                    1
                 )
 
             else:
@@ -1191,29 +1327,30 @@ class ItemAnalyzer:
             # OMITTED
             # ------------------------------------------------
 
-            omitted_percentage = (
+            omitted_percentage = round(
                 omitted_count
                 / self.total_students
-                * 100
+                * 100,
+                1
             )
 
             # ------------------------------------------------
             # RECOMMENDATION
             # ------------------------------------------------
 
-            if discrimination < 0:
+            if discrimination_raw < 0:
 
                 recommendation = (
                     ItemRecommendation.DISCARD
                 )
 
             elif (
-                discrimination < 0.20
+                discrimination_raw < 0.20
                 and
                 (
-                    difficulty < 0.20
+                    difficulty_raw < 0.20
                     or
-                    difficulty > 0.80
+                    difficulty_raw > 0.80
                 )
             ):
 
@@ -1222,11 +1359,11 @@ class ItemAnalyzer:
                 )
 
             elif (
-                discrimination < 0.20
+                discrimination_raw < 0.20
                 or
-                difficulty < 0.20
+                difficulty_raw < 0.20
                 or
-                difficulty > 0.80
+                difficulty_raw > 0.80
             ):
 
                 recommendation = (
@@ -1384,14 +1521,20 @@ class ItemAnalyzer:
                 self.total_questions
             ),
 
-            "mean_score": float(
-                self.scores.mean()
+            "mean_score": round(
+                float(
+                    self.scores.mean()
+                ),
+                1
             )
             if len(self.scores) > 0
             else 0.0,
 
-            "std_score": float(
-                self.scores.std()
+            "std_score": round(
+                float(
+                    self.scores.std()
+                ),
+                1
             )
             if len(self.scores) > 0
             else 0.0,
@@ -1408,10 +1551,13 @@ class ItemAnalyzer:
             if len(self.scores) > 0
             else 0,
 
-            "mean_percentage": float(
-                self.scores.mean()
-                / self.total_questions
-                * 100
+            "mean_percentage": round(
+                float(
+                    self.scores.mean()
+                    / self.total_questions
+                    * 100
+                ),
+                1
             )
             if (
                 len(self.scores) > 0
@@ -1456,5 +1602,6 @@ class ItemAnalyzer:
         return {
             "summary": summary,
             "items": items,
-            "students": students
+            "students": students,
+            "exam_info": self.exam_info
         }
