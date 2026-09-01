@@ -204,6 +204,53 @@ h1, h2, h3 {
     white-space: pre-line;
 }
 
+.metric-info-card {
+    background-color: #FFFFFF;
+    border: 1px solid #DEE4EF;
+    border-radius: 12px;
+    padding: 18px 20px;
+    height: 100%;
+}
+
+.metric-info-title {
+    font-size: 14px;
+    font-weight: 700;
+    color: #16233E;
+    margin-bottom: 8px;
+}
+
+.metric-info-formula {
+    font-family: monospace;
+    font-size: 12.5px;
+    background-color: #EEF2F9;
+    border: 1px solid #DEE4EF;
+    border-radius: 8px;
+    padding: 10px 12px;
+    color: #16233E;
+    margin-bottom: 10px;
+    line-height: 1.5;
+    white-space: pre-wrap;
+}
+
+.metric-info-body {
+    font-size: 13px;
+    color: #4B5875;
+    line-height: 1.5;
+    margin-bottom: 10px;
+}
+
+.metric-info-thresholds {
+    font-size: 12px;
+    color: #4B5875;
+    line-height: 1.7;
+}
+
+.metric-info-thresholds code {
+    background-color: #EEF2F9;
+    padding: 1px 5px;
+    border-radius: 4px;
+}
+
 </style>
 """,
     unsafe_allow_html=True
@@ -248,6 +295,102 @@ st.html(
 </div>
 """
 )
+
+
+# ============================================================
+# METRIC METHODOLOGY (how the numbers are computed)
+# ============================================================
+#
+# Shown up front, before the upload step, so users know exactly
+# what the Difficulty Index, Discrimination Index, and Distractor
+# Efficiency numbers mean before they see them on the dashboard.
+# These formulas mirror item_analyzer.py exactly.
+
+st.markdown(
+    "### 📊 How These Metrics Are Calculated"
+)
+
+metric_col1, metric_col2, metric_col3 = st.columns(3)
+
+with metric_col1:
+
+    st.markdown(
+        """
+<div class="metric-info-card">
+    <div class="metric-info-title">🎯 Difficulty Index</div>
+    <div class="metric-info-formula">Difficulty =
+  Correct Responses / Total Students</div>
+    <div class="metric-info-body">
+        The share of all students who answered the item
+        correctly, on a scale of 0 to 1. A higher value means
+        more students got it right (an easier item); a lower
+        value means fewer did (a harder item).
+    </div>
+    <div class="metric-info-thresholds">
+        <code>&lt; 0.20</code> Very Difficult<br>
+        <code>0.20 – 0.80</code> Ideal<br>
+        <code>&gt; 0.80</code> Too Easy
+    </div>
+</div>
+""",
+        unsafe_allow_html=True
+    )
+
+with metric_col2:
+
+    st.markdown(
+        """
+<div class="metric-info-card">
+    <div class="metric-info-title">📈 Discrimination Index</div>
+    <div class="metric-info-formula">Discrimination =
+  (Correct in Top 27%) / n
+  − (Correct in Bottom 27%) / n</div>
+    <div class="metric-info-body">
+        Students are ranked by overall score, then split into
+        the top-scoring 27% and bottom-scoring 27%
+        (<code>n</code> students each). This compares how often
+        each group got the item right, on a scale of −1 to 1,
+        showing how well the item separates stronger students
+        from weaker ones.
+    </div>
+    <div class="metric-info-thresholds">
+        <code>&lt; 0</code> Negative<br>
+        <code>0.00 – 0.19</code> Poor<br>
+        <code>0.20 – 0.29</code> Fair<br>
+        <code>&ge; 0.30</code> Good
+    </div>
+</div>
+""",
+        unsafe_allow_html=True
+    )
+
+with metric_col3:
+
+    st.markdown(
+        """
+<div class="metric-info-card">
+    <div class="metric-info-title">🧩 Distractor Efficiency</div>
+    <div class="metric-info-formula">Efficiency =
+  Functional Distractors / Total
+  Distractors × 100%</div>
+    <div class="metric-info-body">
+        For each wrong answer option (distractor), we check what
+        percentage of students selected it. An option chosen by
+        at least 5% of students is "functional" — it's plausible
+        enough to test understanding. Options chosen by fewer
+        than 5% are flagged as non-functional distractors.
+    </div>
+    <div class="metric-info-thresholds">
+        <code>≥ 5%</code> selected → Functional<br>
+        <code>&lt; 5%</code> selected → Non-functional
+        (flagged for review)
+    </div>
+</div>
+""",
+        unsafe_allow_html=True
+    )
+
+st.markdown("")
 
 
 # ============================================================
