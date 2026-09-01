@@ -56,9 +56,12 @@ st.markdown(
     """
 <style>
 
+@import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500;600&display=swap');
+
 html, body, [data-testid="stAppViewContainer"] {
     background-color: #F3F5F8 !important;
     color: #16233E !important;
+    font-family: 'Inter', sans-serif !important;
 }
 
 h1, h2, h3 {
@@ -206,49 +209,127 @@ h1, h2, h3 {
 
 .metric-info-card {
     background-color: #FFFFFF;
-    border: 1px solid #DEE4EF;
-    border-radius: 12px;
-    padding: 18px 20px;
+    border: 1px solid #E4E9F2;
+    border-top: 4px solid var(--accent-color, #185FA5);
+    border-radius: 14px;
+    padding: 22px 22px 20px 22px;
     height: 100%;
+    box-shadow: 0 2px 10px rgba(22, 35, 62, 0.04);
+    transition: box-shadow 0.15s ease;
+}
+
+.metric-info-header {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 14px;
+}
+
+.metric-info-icon {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 34px;
+    height: 34px;
+    min-width: 34px;
+    border-radius: 10px;
+    font-size: 16px;
+    background-color: var(--accent-bg, #E6F1FB);
 }
 
 .metric-info-title {
-    font-size: 14px;
+    font-family: 'Space Grotesk', sans-serif;
+    font-size: 15.5px;
     font-weight: 700;
     color: #16233E;
-    margin-bottom: 8px;
+    letter-spacing: -0.01em;
 }
 
 .metric-info-formula {
-    font-family: monospace;
+    font-family: 'JetBrains Mono', monospace;
     font-size: 12.5px;
-    background-color: #EEF2F9;
-    border: 1px solid #DEE4EF;
+    font-weight: 500;
+    background-color: #F6F8FC;
+    border: 1px solid #E4E9F2;
+    border-left: 3px solid var(--accent-color, #185FA5);
     border-radius: 8px;
-    padding: 10px 12px;
-    color: #16233E;
-    margin-bottom: 10px;
-    line-height: 1.5;
+    padding: 12px 14px;
+    color: #1E2D4E;
+    margin-bottom: 14px;
+    line-height: 1.6;
     white-space: pre-wrap;
 }
 
 .metric-info-body {
-    font-size: 13px;
+    font-family: 'Inter', sans-serif;
+    font-size: 13.5px;
+    font-weight: 400;
     color: #4B5875;
-    line-height: 1.5;
-    margin-bottom: 10px;
+    line-height: 1.65;
+    margin-bottom: 14px;
 }
 
 .metric-info-thresholds {
-    font-size: 12px;
+    font-family: 'Inter', sans-serif;
+    font-size: 12.5px;
     color: #4B5875;
-    line-height: 1.7;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    padding-top: 12px;
+    border-top: 1px dashed #E4E9F2;
+}
+
+.metric-info-thresholds .row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
 }
 
 .metric-info-thresholds code {
-    background-color: #EEF2F9;
-    padding: 1px 5px;
-    border-radius: 4px;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11.5px;
+    font-weight: 600;
+    background-color: var(--accent-bg, #EEF2F9);
+    color: var(--accent-color, #185FA5);
+    padding: 3px 8px;
+    border-radius: 20px;
+    white-space: nowrap;
+}
+
+/* Force the three metric cards (and their Streamlit column
+   wrappers) to share one equal height, with the body copy
+   stretching to push each card's threshold list to the same
+   bottom line regardless of text length. */
+
+div[data-testid="stHorizontalBlock"]:has(.metric-info-card) {
+    align-items: stretch;
+}
+
+div[data-testid="stHorizontalBlock"]:has(.metric-info-card)
+    > div[data-testid="column"] {
+    display: flex;
+}
+
+div[data-testid="stHorizontalBlock"]:has(.metric-info-card)
+    > div[data-testid="column"] > div {
+    width: 100%;
+    display: flex;
+}
+
+div[data-testid="stHorizontalBlock"]:has(.metric-info-card)
+    [data-testid="stMarkdownContainer"] {
+    width: 100%;
+    height: 100%;
+}
+
+.metric-info-card {
+    display: flex;
+    flex-direction: column;
+}
+
+.metric-info-body {
+    flex: 1 1 auto;
 }
 
 </style>
@@ -310,14 +391,26 @@ st.markdown(
     "### 📊 How These Metrics Are Calculated"
 )
 
+st.markdown(
+    '<p style="font-family:\'Inter\',sans-serif; font-size:13.5px; '
+    'color:#65728A; margin-top:-6px; margin-bottom:18px;">'
+    "These formulas are applied automatically to every question "
+    "once you upload your files below."
+    "</p>",
+    unsafe_allow_html=True
+)
+
 metric_col1, metric_col2, metric_col3 = st.columns(3)
 
 with metric_col1:
 
     st.markdown(
         """
-<div class="metric-info-card">
-    <div class="metric-info-title">🎯 Difficulty Index</div>
+<div class="metric-info-card" style="--accent-color:#185FA5; --accent-bg:#E6F1FB;">
+    <div class="metric-info-header">
+        <div class="metric-info-icon">🎯</div>
+        <div class="metric-info-title">Difficulty Index</div>
+    </div>
     <div class="metric-info-formula">Difficulty =
   Correct Responses / Total Students</div>
     <div class="metric-info-body">
@@ -327,9 +420,9 @@ with metric_col1:
         value means fewer did (a harder item).
     </div>
     <div class="metric-info-thresholds">
-        <code>&lt; 0.20</code> Very Difficult<br>
-        <code>0.20 – 0.80</code> Ideal<br>
-        <code>&gt; 0.80</code> Too Easy
+        <div class="row"><code>&lt; 0.20</code> Very Difficult</div>
+        <div class="row"><code>0.20 – 0.80</code> Ideal</div>
+        <div class="row"><code>&gt; 0.80</code> Too Easy</div>
     </div>
 </div>
 """,
@@ -340,8 +433,11 @@ with metric_col2:
 
     st.markdown(
         """
-<div class="metric-info-card">
-    <div class="metric-info-title">📈 Discrimination Index</div>
+<div class="metric-info-card" style="--accent-color:#8A4FBE; --accent-bg:#F1E9FA;">
+    <div class="metric-info-header">
+        <div class="metric-info-icon">📈</div>
+        <div class="metric-info-title">Discrimination Index</div>
+    </div>
     <div class="metric-info-formula">Discrimination =
   (Correct in Top 27%) / n
   − (Correct in Bottom 27%) / n</div>
@@ -354,10 +450,10 @@ with metric_col2:
         from weaker ones.
     </div>
     <div class="metric-info-thresholds">
-        <code>&lt; 0</code> Negative<br>
-        <code>0.00 – 0.19</code> Poor<br>
-        <code>0.20 – 0.29</code> Fair<br>
-        <code>&ge; 0.30</code> Good
+        <div class="row"><code>&lt; 0</code> Negative</div>
+        <div class="row"><code>0.00 – 0.19</code> Poor</div>
+        <div class="row"><code>0.20 – 0.29</code> Fair</div>
+        <div class="row"><code>&ge; 0.30</code> Good</div>
     </div>
 </div>
 """,
@@ -368,8 +464,11 @@ with metric_col3:
 
     st.markdown(
         """
-<div class="metric-info-card">
-    <div class="metric-info-title">🧩 Distractor Efficiency</div>
+<div class="metric-info-card" style="--accent-color:#2F8F5B; --accent-bg:#E3F3EA;">
+    <div class="metric-info-header">
+        <div class="metric-info-icon">🧩</div>
+        <div class="metric-info-title">Distractor Efficiency</div>
+    </div>
     <div class="metric-info-formula">Efficiency =
   Functional Distractors / Total
   Distractors × 100%</div>
@@ -381,9 +480,8 @@ with metric_col3:
         than 5% are flagged as non-functional distractors.
     </div>
     <div class="metric-info-thresholds">
-        <code>≥ 5%</code> selected → Functional<br>
-        <code>&lt; 5%</code> selected → Non-functional
-        (flagged for review)
+        <div class="row"><code>≥ 5%</code> selected → Functional</div>
+        <div class="row"><code>&lt; 5%</code> selected → Non-functional (flagged)</div>
     </div>
 </div>
 """,
