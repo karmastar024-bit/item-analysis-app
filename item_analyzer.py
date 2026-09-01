@@ -989,7 +989,7 @@ class ItemAnalyzer:
                 self.scores
                 / self.total_questions
                 * 100,
-                1
+                2
             )
 
         else:
@@ -1149,7 +1149,7 @@ class ItemAnalyzer:
 
             difficulty = round(
                 difficulty_raw,
-                1
+                2
             )
 
             # ------------------------------------------------
@@ -1164,7 +1164,7 @@ class ItemAnalyzer:
 
             discrimination = round(
                 discrimination_raw,
-                1
+                2
             )
 
             # ------------------------------------------------
@@ -1260,7 +1260,7 @@ class ItemAnalyzer:
 
                 percentage = round(
                     percentage_raw,
-                    1
+                    2
                 )
 
                 is_correct = (
@@ -1316,7 +1316,7 @@ class ItemAnalyzer:
                     functional_distractor_count
                     / distractor_total
                     * 100,
-                    1
+                    2
                 )
 
             else:
@@ -1331,7 +1331,7 @@ class ItemAnalyzer:
                 omitted_count
                 / self.total_students
                 * 100,
-                1
+                2
             )
 
             # ------------------------------------------------
@@ -1525,7 +1525,7 @@ class ItemAnalyzer:
                 float(
                     self.scores.mean()
                 ),
-                1
+                2
             )
             if len(self.scores) > 0
             else 0.0,
@@ -1534,7 +1534,7 @@ class ItemAnalyzer:
                 float(
                     self.scores.std()
                 ),
-                1
+                2
             )
             if len(self.scores) > 0
             else 0.0,
