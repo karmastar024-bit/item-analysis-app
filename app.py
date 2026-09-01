@@ -42,7 +42,7 @@ def load_template_bytes(path_str):
 # ============================================================
 
 st.set_page_config(
-    page_title="Assessment Insight",
+    page_title="Item Analysis",
     page_icon="📘",
     layout="wide",
     initial_sidebar_state="collapsed"
@@ -505,10 +505,70 @@ h1, h2, h3 {
 [data-testid="stExpander"] summary { padding: 5px 4px; font-weight: 650; color: #173B3F; }
 [data-testid="stDataFrame"] { border: 1px solid #DCE7E2; border-radius: 12px; overflow: hidden; }
 
+/* Equal-height methodology cards and textbook-style formula notation. */
+.metric-card-grid {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 22px;
+    align-items: stretch;
+}
+.metric-card-grid .metric-info-card {
+    min-height: 510px;
+}
+.formula-label {
+    color: #173B3F;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 12px;
+    font-weight: 700;
+    margin-bottom: 8px;
+}
+.formula-expression {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    color: #173B3F;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11.5px;
+    font-weight: 600;
+    line-height: 1.35;
+    text-align: center;
+}
+.formula-fraction {
+    display: inline-grid;
+    grid-template-rows: auto auto;
+    min-width: 130px;
+    vertical-align: middle;
+}
+.formula-fraction > span:first-child {
+    border-bottom: 1.5px solid currentColor;
+    padding: 0 5px 4px;
+}
+.formula-fraction > span:last-child { padding: 4px 5px 0; }
+.formula-operator { font-size: 18px; line-height: 1; }
+.download-callout {
+    background: linear-gradient(115deg, #E7F3EE, #F9FCF9);
+    border: 1px solid #C6E0D4;
+    border-left: 5px solid #176B5A;
+    border-radius: 14px;
+    padding: 18px 20px;
+    margin: 16px 0 10px;
+}
+.download-callout strong {
+    display: block;
+    color: #173B3F;
+    font-family: 'Space Grotesk', sans-serif;
+    font-size: 16px;
+    margin-bottom: 4px;
+}
+.download-callout span { color: #52666A; font-size: 13px; line-height: 1.5; }
+
 @media (max-width: 700px) {
     .block-container { padding-top: 1.2rem; }
     .header-box { padding: 30px 25px; border-radius: 17px; }
     .workflow-steps { grid-template-columns: 1fr; }
+    .metric-card-grid { grid-template-columns: 1fr; }
+    .metric-card-grid .metric-info-card { min-height: 0; }
 }
 
 </style>
@@ -525,7 +585,7 @@ st.html(
     """
 <div class="header-box">
     <div class="header-content">
-        <div class="eyebrow">Assessment insight studio</div>
+        <div class="eyebrow">Item Analysis</div>
         <h1 class="hero-title">Make every question a better teaching decision.</h1>
         <p class="hero-copy">
             Upload an answer key and student responses to turn classroom
@@ -559,93 +619,56 @@ st.markdown(
     unsafe_allow_html=True
 )
 
-metric_col1, metric_col2, metric_col3 = st.columns(3)
-
-with metric_col1:
-
-    st.markdown(
-        """
-<div class="metric-info-card" style="--accent-color:#185FA5; --accent-bg:#E6F1FB;">
-    <div class="metric-info-header">
-        <div class="metric-info-icon">🎯</div>
-        <div class="metric-info-title">Difficulty Index</div>
+st.markdown(
+    """
+<div class="metric-card-grid">
+  <div class="metric-info-card" style="--accent-color:#185FA5; --accent-bg:#E6F1FB;">
+    <div class="metric-info-header"><div class="metric-info-icon">🎯</div><div class="metric-info-title">Difficulty Index</div></div>
+    <div class="metric-info-formula">
+      <div class="formula-label">Difficulty</div>
+      <div class="formula-expression"><div class="formula-fraction"><span>Correct responses</span><span>Total students</span></div></div>
     </div>
-    <div class="metric-info-formula">Difficulty =
-  Correct Responses / Total Students</div>
-    <div class="metric-info-body">
-        The share of all students who answered the item
-        correctly, on a scale of 0 to 1. A higher value means
-        more students got it right (an easier item); a lower
-        value means fewer did (a harder item).
-    </div>
+    <div class="metric-info-body">The share of students who answered the item correctly, from 0 to 1. Higher values indicate an easier item; lower values indicate a harder item.</div>
     <div class="metric-info-thresholds">
-        <div class="row"><code>&lt; 0.20</code> Very Difficult</div>
-        <div class="row"><code>0.20 – 0.80</code> Ideal</div>
-        <div class="row"><code>&gt; 0.80</code> Too Easy</div>
+      <div class="row"><code>&lt; 0.20</code> Very difficult</div>
+      <div class="row"><code>0.20 – 0.80</code> Ideal</div>
+      <div class="row"><code>&gt; 0.80</code> Too easy</div>
     </div>
+  </div>
+  <div class="metric-info-card" style="--accent-color:#8A4FBE; --accent-bg:#F1E9FA;">
+    <div class="metric-info-header"><div class="metric-info-icon">📈</div><div class="metric-info-title">Discrimination Index</div></div>
+    <div class="metric-info-formula">
+      <div class="formula-label">Top-group success − bottom-group success</div>
+      <div class="formula-expression">
+        <div class="formula-fraction"><span>Correct in top 27%</span><span>n</span></div>
+        <span class="formula-operator">−</span>
+        <div class="formula-fraction"><span>Correct in bottom 27%</span><span>n</span></div>
+      </div>
+    </div>
+    <div class="metric-info-body">Compares the top-scoring and bottom-scoring 27% of students. It shows how well an item separates stronger students from weaker ones, on a scale of −1 to 1.</div>
+    <div class="metric-info-thresholds">
+      <div class="row"><code>&lt; 0</code> Negative</div>
+      <div class="row"><code>0.00 – 0.19</code> Poor</div>
+      <div class="row"><code>0.20 – 0.29</code> Fair</div>
+      <div class="row"><code>≥ 0.30</code> Good</div>
+    </div>
+  </div>
+  <div class="metric-info-card" style="--accent-color:#2F8F5B; --accent-bg:#E3F3EA;">
+    <div class="metric-info-header"><div class="metric-info-icon">🧩</div><div class="metric-info-title">Distractor Efficiency</div></div>
+    <div class="metric-info-formula">
+      <div class="formula-label">Efficiency</div>
+      <div class="formula-expression"><div class="formula-fraction"><span>Functional distractors</span><span>Total distractors</span></div><span class="formula-operator">× 100%</span></div>
+    </div>
+    <div class="metric-info-body">Each wrong option is checked for use. A distractor selected by at least 5% of students is functional; options selected by fewer than 5% are flagged for review.</div>
+    <div class="metric-info-thresholds">
+      <div class="row"><code>≥ 5%</code> selected → Functional</div>
+      <div class="row"><code>&lt; 5%</code> selected → Non-functional (flagged)</div>
+    </div>
+  </div>
 </div>
 """,
-        unsafe_allow_html=True
-    )
-
-with metric_col2:
-
-    st.markdown(
-        """
-<div class="metric-info-card" style="--accent-color:#8A4FBE; --accent-bg:#F1E9FA;">
-    <div class="metric-info-header">
-        <div class="metric-info-icon">📈</div>
-        <div class="metric-info-title">Discrimination Index</div>
-    </div>
-    <div class="metric-info-formula">Discrimination =
-  (Correct in Top 27%) / n
-  − (Correct in Bottom 27%) / n</div>
-    <div class="metric-info-body">
-        Students are ranked by overall score, then split into
-        the top-scoring 27% and bottom-scoring 27%
-        (<code>n</code> students each). This compares how often
-        each group got the item right, on a scale of −1 to 1,
-        showing how well the item separates stronger students
-        from weaker ones.
-    </div>
-    <div class="metric-info-thresholds">
-        <div class="row"><code>&lt; 0</code> Negative</div>
-        <div class="row"><code>0.00 – 0.19</code> Poor</div>
-        <div class="row"><code>0.20 – 0.29</code> Fair</div>
-        <div class="row"><code>&ge; 0.30</code> Good</div>
-    </div>
-</div>
-""",
-        unsafe_allow_html=True
-    )
-
-with metric_col3:
-
-    st.markdown(
-        """
-<div class="metric-info-card" style="--accent-color:#2F8F5B; --accent-bg:#E3F3EA;">
-    <div class="metric-info-header">
-        <div class="metric-info-icon">🧩</div>
-        <div class="metric-info-title">Distractor Efficiency</div>
-    </div>
-    <div class="metric-info-formula">Efficiency =
-  Functional Distractors / Total
-  Distractors × 100%</div>
-    <div class="metric-info-body">
-        For each wrong answer option (distractor), we check what
-        percentage of students selected it. An option chosen by
-        at least 5% of students is "functional" — it's plausible
-        enough to test understanding. Options chosen by fewer
-        than 5% are flagged as non-functional distractors.
-    </div>
-    <div class="metric-info-thresholds">
-        <div class="row"><code>≥ 5%</code> selected → Functional</div>
-        <div class="row"><code>&lt; 5%</code> selected → Non-functional (flagged)</div>
-    </div>
-</div>
-""",
-        unsafe_allow_html=True
-    )
+    unsafe_allow_html=True
+)
 
 st.markdown("")
 
@@ -1791,6 +1814,11 @@ if (
 <div class="section-intro">
     <div class="section-kicker">Shareable record</div>
     <div class="section-title">Download the complete report</div>
+</div>
+<div class="download-callout">
+    <strong>Your report is ready to share.</strong>
+    <span>Download the Excel workbook for item-level findings, option
+    breakdowns, and the overall summary with your examination information.</span>
 </div>
 """,
         unsafe_allow_html=True
