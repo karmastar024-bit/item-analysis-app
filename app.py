@@ -836,13 +836,15 @@ def create_excel_report(results):
 
 
 # ============================================================
-# FILE UPLOAD (click-to-reveal, template-guided)
+# FILE UPLOAD (centered popup, template-guided)
 # ============================================================
 #
-# Nothing but a single upload button is shown at first. Only once
-# it's clicked does the template instructions + download link +
-# actual uploader appear, so users can't accidentally submit a
-# file before seeing what format is required.
+# Each slot shows a single upload button. Clicking it opens a
+# centered modal popup (st.dialog) that strictly explains the
+# required template, offers the sample download, and only lets
+# the user proceed once a file has been chosen. Nothing about
+# the format is buried inline in the page — it's front-and-center
+# in the popup every time.
 
 st.markdown(
     "### 📥 Load Test Data"
@@ -851,14 +853,11 @@ st.markdown(
 
 def _init_upload_state(prefix):
 
-    if f"{prefix}_panel_open" not in st.session_state:
-        st.session_state[f"{prefix}_panel_open"] = False
-
     if f"{prefix}_confirmed_file" not in st.session_state:
         st.session_state[f"{prefix}_confirmed_file"] = None
 
 
-def render_upload_slot(
+def _render_template_popup_body(
     prefix,
     label,
     description_html,
@@ -866,63 +865,20 @@ def render_upload_slot(
     template_download_name
 ):
     """
-    Renders one of the two upload slots (Answer Key / Student
-    Responses) as a click-to-reveal flow:
-
-      1. Just a button, by default.
-      2. Clicking it reveals the template card, download button,
-         file uploader, and a confirm button.
-      3. Once confirmed, collapses to a short "uploaded" summary
-         with a "Change file" option.
+    Shared content rendered inside the centered modal popup for
+    a given upload slot (Answer Key / Student Responses).
     """
 
-    _init_upload_state(prefix)
+    # --------------------------------------------------------
+    # STRICT TEMPLATE NOTICE
+    # --------------------------------------------------------
 
-    confirmed_file = st.session_state[f"{prefix}_confirmed_file"]
-
-    # ------------------------------------------------------
-    # STATE 1: FILE ALREADY CONFIRMED
-    # ------------------------------------------------------
-
-    if confirmed_file is not None:
-
-        st.success(
-            f"✅ {label}: **{confirmed_file.name}**"
-        )
-
-        if st.button(
-            f"Change {label.lower()} file",
-            key=f"{prefix}_change_btn",
-            use_container_width=True
-        ):
-
-            st.session_state[f"{prefix}_confirmed_file"] = None
-            st.session_state[f"{prefix}_panel_open"] = True
-            st.rerun()
-
-        return confirmed_file
-
-    # ------------------------------------------------------
-    # STATE 2: PANEL CLOSED — SHOW ONLY THE UPLOAD BUTTON
-    # ------------------------------------------------------
-
-    if not st.session_state[f"{prefix}_panel_open"]:
-
-        if st.button(
-            f"📤 Upload {label}",
-            key=f"{prefix}_open_btn",
-            type="primary",
-            use_container_width=True
-        ):
-
-            st.session_state[f"{prefix}_panel_open"] = True
-            st.rerun()
-
-        return None
-
-    # ------------------------------------------------------
-    # STATE 3: PANEL OPEN — TEMPLATE + UPLOADER + CONFIRM
-    # ------------------------------------------------------
+    st.warning(
+        f"⚠️ **Strict template required.** Your {label.lower()} "
+        "file **must** match the format below exactly, or the "
+        "analysis will fail. Please download and use the sample "
+        "template rather than a file of your own formatting."
+    )
 
     st.markdown(
         f"""
@@ -938,6 +894,10 @@ def render_upload_slot(
 """,
         unsafe_allow_html=True
     )
+
+    # --------------------------------------------------------
+    # TEMPLATE DOWNLOAD
+    # --------------------------------------------------------
 
     template_bytes = load_template_bytes(str(template_path))
 
@@ -961,10 +921,16 @@ def render_upload_slot(
             f"Sample template file not found at {template_path}."
         )
 
+    st.markdown("---")
+
+    # --------------------------------------------------------
+    # UPLOADER
+    # --------------------------------------------------------
+
     pending_file = st.file_uploader(
         f"Upload your {label} spreadsheet (must match the template above)",
         type=["xlsx", "xls"],
-        key=f"{prefix}_uploader"
+        key=f"{prefix}_uploader_dialog"
     )
 
     btn_col, cancel_col = st.columns(2)
@@ -990,22 +956,17 @@ def render_upload_slot(
     if submit_clicked and pending_file is not None:
 
         st.session_state[f"{prefix}_confirmed_file"] = pending_file
-        st.session_state[f"{prefix}_panel_open"] = False
         st.rerun()
 
     if cancel_clicked:
 
-        st.session_state[f"{prefix}_panel_open"] = False
         st.rerun()
 
-    return None
 
+@st.dialog("📋 Answer Key — Template Required", width="large")
+def _open_answer_key_dialog():
 
-col_key, col_data = st.columns(2)
-
-with col_key:
-
-    key_file = render_upload_slot(
+    _render_template_popup_body(
         prefix="key",
         label="Answer Key",
         description_html=(
@@ -1018,9 +979,11 @@ with col_key:
         template_download_name="Answer_Key_Template.xlsx"
     )
 
-with col_data:
 
-    data_file = render_upload_slot(
+@st.dialog("📋 Student Responses — Template Required", width="large")
+def _open_student_responses_dialog():
+
+    _render_template_popup_body(
         prefix="data",
         label="Student Responses",
         description_html=(
@@ -1030,6 +993,79 @@ with col_data:
         ),
         template_path=STUDENT_TEMPLATE_PATH,
         template_download_name="Student_Responses_Template.xlsx"
+    )
+
+
+def render_upload_slot(prefix, label, dialog_opener):
+    """
+    Renders one of the two upload slots (Answer Key / Student
+    Responses):
+
+      1. Just a button, by default.
+      2. Clicking it opens a centered modal popup with the
+         template rules, download link, uploader, and a
+         confirm/cancel choice.
+      3. Once confirmed, collapses to a short "uploaded" summary
+         with a "Change file" option that reopens the popup.
+    """
+
+    _init_upload_state(prefix)
+
+    confirmed_file = st.session_state[f"{prefix}_confirmed_file"]
+
+    # ------------------------------------------------------
+    # STATE 1: FILE ALREADY CONFIRMED
+    # ------------------------------------------------------
+
+    if confirmed_file is not None:
+
+        st.success(
+            f"✅ {label}: **{confirmed_file.name}**"
+        )
+
+        if st.button(
+            f"Change {label.lower()} file",
+            key=f"{prefix}_change_btn",
+            use_container_width=True
+        ):
+
+            st.session_state[f"{prefix}_confirmed_file"] = None
+            dialog_opener()
+
+        return confirmed_file
+
+    # ------------------------------------------------------
+    # STATE 2: SHOW ONLY THE UPLOAD BUTTON — OPENS POPUP
+    # ------------------------------------------------------
+
+    if st.button(
+        f"📤 Upload {label}",
+        key=f"{prefix}_open_btn",
+        type="primary",
+        use_container_width=True
+    ):
+
+        dialog_opener()
+
+    return None
+
+
+col_key, col_data = st.columns(2)
+
+with col_key:
+
+    key_file = render_upload_slot(
+        prefix="key",
+        label="Answer Key",
+        dialog_opener=_open_answer_key_dialog
+    )
+
+with col_data:
+
+    data_file = render_upload_slot(
+        prefix="data",
+        label="Student Responses",
+        dialog_opener=_open_student_responses_dialog
     )
 
 
