@@ -8,7 +8,14 @@ from pathlib import Path
 
 import pandas as pd
 import streamlit as st
-from openpyxl.styles import Font
+from openpyxl.styles import (
+    Alignment,
+    Border,
+    Font,
+    PatternFill,
+    Side,
+)
+from openpyxl.utils import get_column_letter
 
 from item_analyzer import ItemAnalyzer
 
@@ -1193,6 +1200,63 @@ def create_excel_report(results):
 
         for worksheet in workbook.worksheets:
 
+            # Shared workbook palette: calm, readable, and aligned
+            # with the education-focused application interface.
+            navy_fill = PatternFill(
+                "solid",
+                fgColor="173B3F"
+            )
+            teal_fill = PatternFill(
+                "solid",
+                fgColor="176B5A"
+            )
+            soft_teal_fill = PatternFill(
+                "solid",
+                fgColor="E7F3EE"
+            )
+            stripe_fill = PatternFill(
+                "solid",
+                fgColor="F4F8F6"
+            )
+            label_fill = PatternFill(
+                "solid",
+                fgColor="D9EBE4"
+            )
+            gold_fill = PatternFill(
+                "solid",
+                fgColor="FFF1D6"
+            )
+            retain_fill = PatternFill(
+                "solid",
+                fgColor="D9F0E2"
+            )
+            review_fill = PatternFill(
+                "solid",
+                fgColor="FFF1D6"
+            )
+            revise_fill = PatternFill(
+                "solid",
+                fgColor="FCE8D5"
+            )
+            discard_fill = PatternFill(
+                "solid",
+                fgColor="F8DDDA"
+            )
+            thin_teal = Side(
+                style="thin",
+                color="BFD8CE"
+            )
+            header_row = DATA_STARTROW + 1
+            first_data_row = header_row + 1
+            last_column = worksheet.max_column
+
+            worksheet.sheet_view.showGridLines = False
+            worksheet.sheet_properties.tabColor = (
+                "176B5A"
+                if worksheet.title != "Overall Summary"
+                else "D69E2E"
+            )
+
             # ------------------------------------------------
             # EXAM INFORMATION BANNER (rows 1-6)
             # ------------------------------------------------
@@ -1203,10 +1267,25 @@ def create_excel_report(results):
                 value="EXAM INFORMATION"
             )
 
+            worksheet.merge_cells(
+                start_row=1,
+                start_column=1,
+                end_row=1,
+                end_column=last_column,
+            )
+
+            title_cell.fill = navy_fill
             title_cell.font = Font(
                 bold=True,
-                size=12
+                size=14,
+                color="FFFFFF",
+                name="Aptos Display"
             )
+            title_cell.alignment = Alignment(
+                horizontal="left",
+                vertical="center"
+            )
+            worksheet.row_dimensions[1].height = 28
 
             for row_offset, (label, value) in enumerate(
                 exam_info_rows,
@@ -1219,30 +1298,98 @@ def create_excel_report(results):
                     value=label
                 )
 
+                label_cell.fill = label_fill
                 label_cell.font = Font(
-                    bold=True
+                    bold=True,
+                    color="173B3F",
+                    name="Aptos"
+                )
+                label_cell.alignment = Alignment(
+                    vertical="center"
                 )
 
-                worksheet.cell(
+                value_cell = worksheet.cell(
                     row=row_offset,
                     column=2,
                     value=value
                 )
+                value_cell.font = Font(
+                    color="314E52",
+                    name="Aptos"
+                )
+                value_cell.alignment = Alignment(
+                    vertical="center"
+                )
+                worksheet.row_dimensions[row_offset].height = 20
+
+            # Table headers establish a strong visual starting point.
+            for header_cell in worksheet[header_row]:
+
+                header_cell.fill = teal_fill
+                header_cell.font = Font(
+                    bold=True,
+                    color="FFFFFF",
+                    name="Aptos"
+                )
+                header_cell.alignment = Alignment(
+                    horizontal="center",
+                    vertical="center",
+                    wrap_text=True,
+                )
+                header_cell.border = Border(
+                    top=thin_teal,
+                    bottom=thin_teal,
+                )
+
+            worksheet.row_dimensions[header_row].height = 32
+
+            # Gentle zebra striping makes longer tables easier to scan.
+            for row in range(
+                first_data_row,
+                worksheet.max_row + 1,
+            ):
+
+                for cell in worksheet[row]:
+
+                    cell.font = Font(
+                        color="243D41",
+                        name="Aptos",
+                        size=10,
+                    )
+                    cell.alignment = Alignment(
+                        vertical="center",
+                        wrap_text=True,
+                    )
+                    cell.border = Border(
+                        bottom=Side(
+                            style="hair",
+                            color="D8E5DF",
+                        )
+                    )
+
+                    if row % 2 == 1:
+                        cell.fill = stripe_fill
 
             # Freeze panes just below the data table's header
             # row (banner rows 1-7 + header row 8).
             worksheet.freeze_panes = (
                 f"A{DATA_STARTROW + 2}"
             )
+            worksheet.auto_filter.ref = (
+                f"A{header_row}:"
+                f"{worksheet.cell(worksheet.max_row, last_column).coordinate}"
+            )
 
             # Auto-size columns
-            for column_cells in worksheet.columns:
+            for column_index, column_cells in enumerate(
+                worksheet.columns,
+                start=1,
+            ):
 
                 max_length = 0
 
-                column_letter = (
-                    column_cells[0]
-                    .column_letter
+                column_letter = get_column_letter(
+                    column_index
                 )
 
                 for cell in column_cells:
@@ -1273,6 +1420,33 @@ def create_excel_report(results):
                     ),
                     40
                 )
+
+            # Improve readability for the descriptive first column
+            # and keep compact numeric fields centrally aligned.
+            worksheet.column_dimensions["A"].width = min(
+                max(
+                    worksheet.column_dimensions["A"].width,
+                    20,
+                ),
+                36,
+            )
+
+            for column in range(2, last_column + 1):
+
+                for cell in worksheet.iter_cols(
+                    min_col=column,
+                    max_col=column,
+                    min_row=first_data_row,
+                    max_row=worksheet.max_row,
+                ):
+
+                    for value_cell in cell:
+
+                        if isinstance(value_cell.value, (int, float)):
+                            value_cell.alignment = Alignment(
+                                horizontal="center",
+                                vertical="center",
+                            )
 
             # Display decimal-valued analysis results with two places,
             # including trailing zeroes (for example, 0.50).
@@ -1316,6 +1490,89 @@ def create_excel_report(results):
                             row=row,
                             column=2,
                         ).number_format = "0.00"
+
+            # Use color cues only for meaningful diagnostic labels.
+            for header_cell in worksheet[header_row]:
+
+                if header_cell.value not in {
+                    "Recommendation",
+                    "Status",
+                }:
+                    continue
+
+                for row in range(
+                    first_data_row,
+                    worksheet.max_row + 1,
+                ):
+
+                    status_cell = worksheet.cell(
+                        row=row,
+                        column=header_cell.column,
+                    )
+                    status = str(status_cell.value).upper()
+
+                    if "RETAIN" in status or "CORRECT" in status:
+                        status_cell.fill = retain_fill
+                        status_cell.font = Font(
+                            bold=True,
+                            color="176B5A",
+                            name="Aptos",
+                        )
+
+                    elif "NON-FUNCTIONAL" in status:
+                        status_cell.fill = discard_fill
+                        status_cell.font = Font(
+                            bold=True,
+                            color="B42318",
+                            name="Aptos",
+                        )
+
+                    elif "REVIEW" in status or "FUNCTIONAL" in status:
+                        status_cell.fill = review_fill
+                        status_cell.font = Font(
+                            bold=True,
+                            color="9A6700",
+                            name="Aptos",
+                        )
+
+                    elif "REVISE" in status:
+                        status_cell.fill = revise_fill
+                        status_cell.font = Font(
+                            bold=True,
+                            color="B54708",
+                            name="Aptos",
+                        )
+
+                    elif "DISCARD" in status:
+                        status_cell.fill = discard_fill
+                        status_cell.font = Font(
+                            bold=True,
+                            color="B42318",
+                            name="Aptos",
+                        )
+
+            if worksheet.title == "Overall Summary":
+
+                for row in range(
+                    first_data_row,
+                    worksheet.max_row + 1,
+                ):
+
+                    worksheet.cell(
+                        row=row,
+                        column=1,
+                    ).fill = soft_teal_fill
+
+                    value_cell = worksheet.cell(
+                        row=row,
+                        column=2,
+                    )
+                    value_cell.fill = gold_fill
+                    value_cell.font = Font(
+                        bold=True,
+                        color="173B3F",
+                        name="Aptos",
+                    )
 
     output.seek(0)
 
@@ -1802,49 +2059,6 @@ if (
                 0
             )
         )
-
-    # ========================================================
-    # DOWNLOAD REPORT
-    # ========================================================
-
-    st.markdown("---")
-
-    st.markdown(
-        """
-<div class="section-intro">
-    <div class="section-kicker">Shareable record</div>
-    <div class="section-title">Download the complete report</div>
-</div>
-<div class="download-callout">
-    <strong>Your report is ready to share.</strong>
-    <span>Download the Excel workbook for item-level findings, option
-    breakdowns, and the overall summary with your examination information.</span>
-</div>
-""",
-        unsafe_allow_html=True
-    )
-
-    report_bytes = create_excel_report(
-        results
-    )
-
-    st.download_button(
-        label="⬇️ Download Complete Item Analysis Report",
-        data=report_bytes,
-        file_name="Item_Analysis_Report.xlsx",
-        mime=(
-            "application/vnd.openxmlformats-officedocument."
-            "spreadsheetml.sheet"
-        ),
-        type="primary",
-        use_container_width=True
-    )
-
-    st.caption(
-        "The report contains Item Analysis first, followed by "
-        "Option Breakdown and Overall Summary, each stamped with "
-        "your exam information."
-    )
 
     # ========================================================
     # ITEM ANALYSIS
@@ -2542,6 +2756,49 @@ if (
             use_container_width=True,
             hide_index=True
         )
+
+    # ====================================================
+    # DOWNLOAD REPORT
+    # ====================================================
+
+    st.markdown("---")
+
+    st.markdown(
+        """
+<div class="section-intro">
+    <div class="section-kicker">Shareable record</div>
+    <div class="section-title">Download the complete report</div>
+</div>
+<div class="download-callout">
+    <strong>Your report is ready to share.</strong>
+    <span>Download the Excel workbook for item-level findings, option
+    breakdowns, and the overall summary with your examination information.</span>
+</div>
+""",
+        unsafe_allow_html=True
+    )
+
+    report_bytes = create_excel_report(
+        results
+    )
+
+    st.download_button(
+        label="⬇️ Download Complete Item Analysis Report",
+        data=report_bytes,
+        file_name="Item_Analysis_Report.xlsx",
+        mime=(
+            "application/vnd.openxmlformats-officedocument."
+            "spreadsheetml.sheet"
+        ),
+        type="primary",
+        use_container_width=True
+    )
+
+    st.caption(
+        "The report contains Item Analysis first, followed by "
+        "Option Breakdown and Overall Summary, each stamped with "
+        "your exam information."
+    )
 
 
 # ============================================================
