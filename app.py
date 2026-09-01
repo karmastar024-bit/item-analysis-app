@@ -765,7 +765,7 @@ def create_excel_report(results):
                         "difficulty",
                         0
                     ),
-                    1
+                    2
                 ),
 
             "Difficulty Status":
@@ -782,7 +782,7 @@ def create_excel_report(results):
                         "discrimination",
                         0
                     ),
-                    1
+                    2
                 ),
 
             "Discrimination Status":
@@ -799,7 +799,7 @@ def create_excel_report(results):
                         "distractor_efficiency",
                         0
                     ),
-                    1
+                    2
                 ),
 
             "Non-functional Distractors":
@@ -896,7 +896,7 @@ def create_excel_report(results):
                             "percentage",
                             0
                         ),
-                        1
+                        2
                     ),
 
                 "Status":
@@ -950,7 +950,7 @@ def create_excel_report(results):
                     "mean_score",
                     0
                 ),
-                1
+                2
             ),
 
             round(
@@ -959,7 +959,7 @@ def create_excel_report(results):
                     "std_score",
                     0
                 ),
-                1
+                2
             ),
 
             get_value(
@@ -980,7 +980,7 @@ def create_excel_report(results):
                     "mean_percentage",
                     0
                 ),
-                1
+                2
             )
         ]
     })
@@ -1103,6 +1103,49 @@ def create_excel_report(results):
                     ),
                     40
                 )
+
+            # Display decimal-valued analysis results with two places,
+            # including trailing zeroes (for example, 0.50).
+            decimal_headers = {
+                "Difficulty Index",
+                "Discrimination Index",
+                "Distractor Efficiency (%)",
+                "Percentage",
+            }
+
+            for header_cell in worksheet[DATA_STARTROW + 1]:
+
+                if header_cell.value in decimal_headers:
+
+                    for column_cells in worksheet.iter_cols(
+                        min_col=header_cell.column,
+                        max_col=header_cell.column,
+                        min_row=DATA_STARTROW + 2,
+                        max_row=worksheet.max_row,
+                    ):
+
+                        for cell in column_cells:
+
+                            if isinstance(cell.value, (int, float)):
+                                cell.number_format = "0.00"
+
+            if worksheet.title == "Overall Summary":
+
+                for row in range(
+                    DATA_STARTROW + 2,
+                    worksheet.max_row + 1,
+                ):
+
+                    if worksheet.cell(row=row, column=1).value in {
+                        "Mean Score",
+                        "Standard Deviation",
+                        "Mean Percentage",
+                    }:
+
+                        worksheet.cell(
+                            row=row,
+                            column=2,
+                        ).number_format = "0.00"
 
     output.seek(0)
 
@@ -1521,7 +1564,7 @@ if (
 
         st.metric(
             "Mean Score",
-            f"{float(mean_score):.1f} / {total_questions}"
+            f"{float(mean_score):.2f} / {total_questions}"
         )
 
     # ========================================================
@@ -1534,7 +1577,7 @@ if (
 
         st.metric(
             "Standard Deviation",
-            f"{float(get_value(summary, 'std_score', 0)):.1f}"
+            f"{float(get_value(summary, 'std_score', 0)):.2f}"
         )
 
     with metric_col5:
@@ -1794,7 +1837,7 @@ if (
 
                 st.metric(
                     "Difficulty Index",
-                    f"{difficulty:.1f}",
+                    f"{difficulty:.2f}",
                     delta=str(
                         difficulty_status
                     ),
@@ -1848,7 +1891,7 @@ if (
 
                 st.metric(
                     "Discrimination Index",
-                    f"{discrimination:.1f}",
+                    f"{discrimination:.2f}",
                     delta=str(
                         discrimination_status
                     ),
@@ -2042,7 +2085,7 @@ if (
                     f'style="flex: {percentage} 0 auto; '
                     f'background-color: {background};" '
                     f'title="{safe_label}: '
-                    f'{percentage:.1f}%">'
+                    f'{percentage:.2f}%">'
                     f'{safe_label}'
                     '</div>'
                 )
@@ -2102,7 +2145,7 @@ if (
                     f'{omitted_percentage} 0 auto; '
                     'background-color: #92A0BD;" '
                     f'title="Omitted: '
-                    f'{omitted_percentage:.1f}%">'
+                    f'{omitted_percentage:.2f}%">'
                     '—'
                     '</div>'
                 )
@@ -2190,7 +2233,7 @@ if (
                         ),
 
                     "Distribution":
-                        f"{percentage:.1f}%",
+                        f"{percentage:.2f}%",
 
                     "Diagnostic Evaluation":
                         role
@@ -2240,7 +2283,7 @@ if (
                 ),
 
             "Difficulty":
-                f"{float(get_value(item, 'difficulty', 0)):.1f}",
+                f"{float(get_value(item, 'difficulty', 0)):.2f}",
 
             "Difficulty Status":
                 get_value(
@@ -2250,7 +2293,7 @@ if (
                 ),
 
             "Discrimination":
-                f"{float(get_value(item, 'discrimination', 0)):.1f}",
+                f"{float(get_value(item, 'discrimination', 0)):.2f}",
 
             "Discrimination Status":
                 get_value(
