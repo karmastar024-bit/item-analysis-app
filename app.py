@@ -1,2255 +1,1607 @@
-import html
-import math
-import tempfile
-from dataclasses import asdict, is_dataclass
+import re
+from dataclasses import dataclass
 from enum import Enum
-from io import BytesIO
-from pathlib import Path
 
+import numpy as np
 import pandas as pd
-import streamlit as st
-
-from item_analyzer import ItemAnalyzer
 
 
 # ============================================================
-# SAMPLE TEMPLATE FILES
+# CONSTANTS
 # ============================================================
-# These are the exact official template workbooks, checked into
-# the repo under templates/. They are served as-is (not generated)
-# so what the user downloads always matches what the analyzer's
-# header-detection logic expects.
 
-TEMPLATES_DIR = Path(__file__).parent / "templates"
-ANSWER_KEY_TEMPLATE_PATH = TEMPLATES_DIR / "answer_key_template.xlsx"
-STUDENT_TEMPLATE_PATH = TEMPLATES_DIR / "student_response_template.xlsx"
+OPTION_LETTERS = ["A", "B", "C", "D"]
+
+# A distractor selected by fewer than 5% of students
+# is considered non-functional.
+NON_FUNCTIONAL_THRESHOLD = 0.05
 
 
-@st.cache_data
-def load_template_bytes(path_str):
+# ============================================================
+# ENUMS
+# ============================================================
 
-    path = Path(path_str)
+class ItemRecommendation(Enum):
+    RETAIN = "RETAIN"
+    REVIEW = "REVIEW"
+    REVISE = "REVISE"
+    DISCARD = "DISCARD"
 
-    if not path.exists():
+
+# ============================================================
+# DATA CLASSES
+# ============================================================
+
+@dataclass
+class DistractorOption:
+    option: str
+    count: int
+    percentage: float
+    is_correct: bool
+    is_functional: bool
+
+
+@dataclass
+class ItemStats:
+    question: str
+    question_number: int
+
+    correct_answer: str
+    correct_count: int
+    total_students: int
+
+    difficulty: float
+    discrimination: float
+
+    recommendation: ItemRecommendation
+
+    difficulty_status: str
+    discrimination_status: str
+
+    distractor_efficiency: float
+    non_functional_distractors: list
+
+    option_breakdown: list
+
+    omitted_count: int
+    omitted_percentage: float
+
+
+@dataclass
+class StudentStats:
+    rank: int
+    student_id: str
+    name: str
+
+    score: int
+    percentage: float
+
+    responses: list
+    correct_count: int
+
+
+# ============================================================
+# QUESTION NORMALIZATION
+# ============================================================
+
+def normalize_question_label(value):
+    """
+    Convert different question naming styles into a canonical
+    question number.
+
+    Examples:
+
+        Q1          -> 1
+        q1          -> 1
+        Q01         -> 1
+        q01         -> 1
+        Question 1  -> 1
+        question1   -> 1
+        QUESTION 01 -> 1
+        1           -> 1
+        "  Q 1 "    -> 1
+
+    Also handles simple Roman-numeral forms such as:
+
+        QI  -> 1
+        QII -> 2
+        QIII -> 3
+        QIV -> 4
+
+    Returns None if the value does not look like a question label.
+    """
+
+    if value is None:
         return None
 
-    return path.read_bytes()
-
-
-# ============================================================
-# PAGE CONFIGURATION
-# ============================================================
-
-st.set_page_config(
-    page_title="Item Analysis",
-    page_icon="",
-    layout="wide",
-    initial_sidebar_state="collapsed"
-)
-
-
-# ============================================================
-# CUSTOM CSS
-# ============================================================
-
-st.markdown(
-    """
-<style>
-
-@import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500;600&display=swap');
-
-html, body, [data-testid="stAppViewContainer"] {
-    background-color: #F3F5F8 !important;
-    color: #16233E !important;
-    font-family: 'Inter', sans-serif !important;
-}
-
-h1, h2, h3 {
-    font-family: 'Space Grotesk', sans-serif !important;
-}
-
-.header-box {
-    background-color: #16233E;
-    background-image:
-        linear-gradient(
-            rgba(255,255,255,0.04) 1px,
-            transparent 1px
-        ),
-        linear-gradient(
-            90deg,
-            rgba(255,255,255,0.04) 1px,
-            transparent 1px
-        );
-
-    background-size: 20px 20px;
-
-    padding: 30px;
-
-    border-radius: 14px;
-
-    color: #FFFFFF;
-
-    margin-bottom: 25px;
-}
-
-.badge-base {
-    display: inline-block;
-    padding: 4px 12px;
-    border-radius: 20px;
-    font-size: 11px;
-    font-weight: 700;
-    text-transform: uppercase;
-}
-
-.badge-retain {
-    background-color: #E3F3EA;
-    color: #2F8F5B;
-}
-
-.badge-review {
-    background-color: #FBF0DE;
-    color: #C9862B;
-}
-
-.badge-revise {
-    background-color: #FAEAE2;
-    color: #BD5B34;
-}
-
-.badge-discard {
-    background-color: #FAE7E5;
-    color: #B23A32;
-}
-
-.dist-container {
-    display: flex;
-    width: 100%;
-    height: 30px;
-    border-radius: 6px;
-    overflow: hidden;
-    margin: 10px 0;
-    border: 1px solid #DEE4EF;
-}
-
-.dist-segment {
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    color: white;
-    font-family: monospace;
-    font-size: 11px;
-    font-weight: bold;
-}
-
-.report-title {
-    font-size: 18px;
-    font-weight: 700;
-    color: #16233E;
-}
-
-.small-muted {
-    font-size: 12px;
-    color: #65728A;
-}
-
-.template-card {
-    background-color: #FFFFFF;
-    border: 1px solid #DEE4EF;
-    border-radius: 12px;
-    padding: 18px 20px;
-    margin-bottom: 10px;
-}
-
-.template-card-title {
-    font-size: 14px;
-    font-weight: 700;
-    color: #16233E;
-    margin-bottom: 6px;
-}
-
-.template-card-body {
-    font-size: 13px;
-    color: #4B5875;
-    line-height: 1.5;
-}
-
-.template-required-badge {
-    display: inline-block;
-    background-color: #E6F1FB;
-    color: #185FA5;
-    font-size: 10px;
-    font-weight: 700;
-    text-transform: uppercase;
-    padding: 3px 10px;
-    border-radius: 20px;
-    margin-left: 8px;
-}
-
-.template-error-card {
-    background-color: #FAE7E5;
-    border: 1px solid #F0C4BE;
-    border-radius: 12px;
-    padding: 16px 20px;
-    margin: 10px 0;
-}
-
-.template-error-title {
-    font-size: 14px;
-    font-weight: 700;
-    color: #B23A32;
-    margin-bottom: 4px;
-}
-
-.template-error-body {
-    font-size: 13px;
-    color: #7A2A22;
-    line-height: 1.5;
-    white-space: pre-line;
-}
-
-.metric-info-card {
-    background-color: #FFFFFF;
-    border: 1px solid #E4E9F2;
-    border-top: 4px solid var(--accent-color, #185FA5);
-    border-radius: 14px;
-    padding: 22px 22px 20px 22px;
-    height: 100%;
-    box-shadow: 0 2px 10px rgba(22, 35, 62, 0.04);
-    transition: box-shadow 0.15s ease;
-}
-
-.metric-info-header {
-    display: flex;
-    align-items: center;
-    gap: 10px;
-    margin-bottom: 14px;
-}
-
-.metric-info-icon {
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    width: 34px;
-    height: 34px;
-    min-width: 34px;
-    border-radius: 10px;
-    font-size: 16px;
-    background-color: var(--accent-bg, #E6F1FB);
-}
-
-.metric-info-title {
-    font-family: 'Space Grotesk', sans-serif;
-    font-size: 15.5px;
-    font-weight: 700;
-    color: #16233E;
-    letter-spacing: -0.01em;
-}
-
-.metric-info-formula {
-    font-family: 'JetBrains Mono', monospace;
-    font-size: 12.5px;
-    font-weight: 500;
-    background-color: #F6F8FC;
-    border: 1px solid #E4E9F2;
-    border-left: 3px solid var(--accent-color, #185FA5);
-    border-radius: 8px;
-    padding: 12px 14px;
-    color: #1E2D4E;
-    margin-bottom: 14px;
-    line-height: 1.6;
-    white-space: pre-wrap;
-}
-
-.metric-info-body {
-    font-family: 'Inter', sans-serif;
-    font-size: 13.5px;
-    font-weight: 400;
-    color: #4B5875;
-    line-height: 1.65;
-    margin-bottom: 14px;
-}
-
-.metric-info-thresholds {
-    font-family: 'Inter', sans-serif;
-    font-size: 12.5px;
-    color: #4B5875;
-    display: flex;
-    flex-direction: column;
-    gap: 6px;
-    padding-top: 12px;
-    border-top: 1px dashed #E4E9F2;
-}
-
-.metric-info-thresholds .row {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-}
-
-.metric-info-thresholds code {
-    font-family: 'JetBrains Mono', monospace;
-    font-size: 11.5px;
-    font-weight: 600;
-    background-color: var(--accent-bg, #EEF2F9);
-    color: var(--accent-color, #185FA5);
-    padding: 3px 8px;
-    border-radius: 20px;
-    white-space: nowrap;
-}
-
-/* Force the three metric cards (and their Streamlit column
-   wrappers) to share one equal height, with the body copy
-   stretching to push each card's threshold list to the same
-   bottom line regardless of text length. */
-
-div[data-testid="stHorizontalBlock"]:has(.metric-info-card) {
-    align-items: stretch;
-}
-
-div[data-testid="stHorizontalBlock"]:has(.metric-info-card)
-    > div[data-testid="column"] {
-    display: flex;
-}
-
-div[data-testid="stHorizontalBlock"]:has(.metric-info-card)
-    > div[data-testid="column"] > div {
-    width: 100%;
-    display: flex;
-}
-
-div[data-testid="stHorizontalBlock"]:has(.metric-info-card)
-    [data-testid="stMarkdownContainer"] {
-    width: 100%;
-    height: 100%;
-}
-
-.metric-info-card {
-    display: flex;
-    flex-direction: column;
-}
-
-.metric-info-body {
-    flex: 1 1 auto;
-}
-
-</style>
-""",
-    unsafe_allow_html=True
-)
-
-
-# ============================================================
-# HEADER
-# ============================================================
-
-st.html(
-    """
-<div class="header-box">
-
-    <div style="
-        font-family: monospace;
-        font-size: 11px;
-        letter-spacing: 0.1em;
-        color: #AFC3DC;
-        text-transform: uppercase;
-    ">
-        ITEM ANALYZER
-    </div>
-
-    <h1 style="
-        color: white;
-        margin: 5px 0;
-    ">
-        Diagnose your assessment, question by question
-    </h1>
-
-    <p style="
-        color: #C5D2E6;
-        font-size: 14px;
-        margin-bottom: 0;
-    ">
-        Upload an answer key and student responses to calculate
-        difficulty, discrimination, and distractor readouts
-        for every item.
-    </p>
-
-</div>
-"""
-)
-
-
-# ============================================================
-# METRIC METHODOLOGY (how the numbers are computed)
-# ============================================================
-#
-# Shown up front, before the upload step, so users know exactly
-# what the Difficulty Index, Discrimination Index, and Distractor
-# Efficiency numbers mean before they see them on the dashboard.
-# These formulas mirror item_analyzer.py exactly.
-
-st.markdown(
-    "### 📊 How These Metrics Are Calculated"
-)
-
-st.markdown(
-    '<p style="font-family:\'Inter\',sans-serif; font-size:13.5px; '
-    'color:#65728A; margin-top:-6px; margin-bottom:18px;">'
-    "These formulas are applied automatically to every question "
-    "once you upload your files below."
-    "</p>",
-    unsafe_allow_html=True
-)
-
-metric_col1, metric_col2, metric_col3 = st.columns(3)
-
-with metric_col1:
-
-    st.markdown(
-        """
-<div class="metric-info-card" style="--accent-color:#185FA5; --accent-bg:#E6F1FB;">
-    <div class="metric-info-header">
-        <div class="metric-info-icon">🎯</div>
-        <div class="metric-info-title">Difficulty Index</div>
-    </div>
-    <div class="metric-info-formula">Difficulty =
-  Correct Responses / Total Students</div>
-    <div class="metric-info-body">
-        The share of all students who answered the item
-        correctly, on a scale of 0 to 1. A higher value means
-        more students got it right (an easier item); a lower
-        value means fewer did (a harder item).
-    </div>
-    <div class="metric-info-thresholds">
-        <div class="row"><code>&lt; 0.20</code> Very Difficult</div>
-        <div class="row"><code>0.20 – 0.80</code> Ideal</div>
-        <div class="row"><code>&gt; 0.80</code> Too Easy</div>
-    </div>
-</div>
-""",
-        unsafe_allow_html=True
-    )
-
-with metric_col2:
-
-    st.markdown(
-        """
-<div class="metric-info-card" style="--accent-color:#8A4FBE; --accent-bg:#F1E9FA;">
-    <div class="metric-info-header">
-        <div class="metric-info-icon">📈</div>
-        <div class="metric-info-title">Discrimination Index</div>
-    </div>
-    <div class="metric-info-formula">Discrimination =
-  (Correct in Top 27%) / n
-  − (Correct in Bottom 27%) / n</div>
-    <div class="metric-info-body">
-        Students are ranked by overall score, then split into
-        the top-scoring 27% and bottom-scoring 27%
-        (<code>n</code> students each). This compares how often
-        each group got the item right, on a scale of −1 to 1,
-        showing how well the item separates stronger students
-        from weaker ones.
-    </div>
-    <div class="metric-info-thresholds">
-        <div class="row"><code>&lt; 0</code> Negative</div>
-        <div class="row"><code>0.00 – 0.19</code> Poor</div>
-        <div class="row"><code>0.20 – 0.29</code> Fair</div>
-        <div class="row"><code>&ge; 0.30</code> Good</div>
-    </div>
-</div>
-""",
-        unsafe_allow_html=True
-    )
-
-with metric_col3:
-
-    st.markdown(
-        """
-<div class="metric-info-card" style="--accent-color:#2F8F5B; --accent-bg:#E3F3EA;">
-    <div class="metric-info-header">
-        <div class="metric-info-icon">🧩</div>
-        <div class="metric-info-title">Distractor Efficiency</div>
-    </div>
-    <div class="metric-info-formula">Efficiency =
-  Functional Distractors / Total
-  Distractors × 100%</div>
-    <div class="metric-info-body">
-        For each wrong answer option (distractor), we check what
-        percentage of students selected it. An option chosen by
-        at least 5% of students is "functional" — it's plausible
-        enough to test understanding. Options chosen by fewer
-        than 5% are flagged as non-functional distractors.
-    </div>
-    <div class="metric-info-thresholds">
-        <div class="row"><code>≥ 5%</code> selected → Functional</div>
-        <div class="row"><code>&lt; 5%</code> selected → Non-functional (flagged)</div>
-    </div>
-</div>
-""",
-        unsafe_allow_html=True
-    )
-
-st.markdown("")
-
-
-# ============================================================
-# HELPER FUNCTIONS
-# ============================================================
-
-def sanitize(data):
-    """
-    Convert dataclasses and Enum values into JSON/Streamlit-safe
-    Python objects.
-
-    Also handles NaN and Infinity.
-    """
-
-    # IMPORTANT:
-    # This fixes the previous:
-    # NameError: name 'Enum' is not defined
-    if isinstance(data, Enum):
-        return data.value
-
-    if is_dataclass(data):
-
-        return sanitize(
-            asdict(data)
-        )
-
-    if isinstance(data, dict):
-
-        return {
-            key: sanitize(value)
-            for key, value in data.items()
-        }
-
-    if isinstance(data, list):
-
-        return [
-            sanitize(item)
-            for item in data
-        ]
-
-    if isinstance(data, tuple):
-
-        return [
-            sanitize(item)
-            for item in data
-        ]
-
-    if isinstance(data, float):
-
-        if math.isnan(data) or math.isinf(data):
-
-            return 0.0
-
-    return data
-
-
-def get_value(
-    obj,
-    key,
-    default=None
-):
-
-    if isinstance(obj, dict):
-
-        return obj.get(
-            key,
-            default
-        )
-
-    return getattr(
-        obj,
-        key,
-        default
-    )
-
-
-def recommendation_badge(
-    recommendation
-):
-
-    rec = str(
-        recommendation
-    ).upper()
-
-    if rec == "RETAIN":
-
-        return (
-            '<span class="badge-base badge-retain">'
-            'RETAIN'
-            '</span>'
-        )
-
-    if rec == "REVIEW":
-
-        return (
-            '<span class="badge-base badge-review">'
-            'REVIEW'
-            '</span>'
-        )
-
-    if rec == "REVISE":
-
-        return (
-            '<span class="badge-base badge-revise">'
-            'REVISE'
-            '</span>'
-        )
-
-    if rec == "DISCARD":
-
-        return (
-            '<span class="badge-base badge-discard">'
-            'DISCARD'
-            '</span>'
-        )
-
-    return (
-        '<span class="badge-base badge-review">'
-        f'{html.escape(rec)}'
-        '</span>'
-    )
-
-
-# ============================================================
-# EXCEL REPORT GENERATOR
-# ============================================================
-
-def create_excel_report(results):
-
-    """
-    Create a complete downloadable Excel report.
-
-    Sheet order:
-
-    1. Item Analysis
-    2. Option Breakdown
-    3. Overall Summary
-    4. Student Ranking
-    """
-
-    output = BytesIO()
-
-    summary = get_value(
-        results,
-        "summary",
-        {}
-    )
-
-    items = get_value(
-        results,
-        "items",
-        []
-    )
-
-    students = get_value(
-        results,
-        "students",
-        []
-    )
-
-    # --------------------------------------------------------
-    # ITEM ANALYSIS DATA
-    # --------------------------------------------------------
-
-    item_rows = []
-
-    for item in items:
-
-        recommendation = get_value(
-            item,
-            "recommendation",
-            ""
-        )
-
-        if isinstance(
-            recommendation,
-            Enum
-        ):
-
-            recommendation = (
-                recommendation.value
-            )
-
-        nfd = get_value(
-            item,
-            "non_functional_distractors",
-            []
-        )
-
-        if nfd is None:
-            nfd = []
-
-        item_rows.append({
-
-            "Question":
-                get_value(
-                    item,
-                    "question",
-                    ""
-                ),
-
-            "Question Number":
-                get_value(
-                    item,
-                    "question_number",
-                    ""
-                ),
-
-            "Correct Answer":
-                get_value(
-                    item,
-                    "correct_answer",
-                    ""
-                ),
-
-            "Correct Count":
-                get_value(
-                    item,
-                    "correct_count",
-                    0
-                ),
-
-            "Total Students":
-                get_value(
-                    item,
-                    "total_students",
-                    0
-                ),
-
-            "Difficulty Index":
-                get_value(
-                    item,
-                    "difficulty",
-                    0
-                ),
-
-            "Difficulty Status":
-                get_value(
-                    item,
-                    "difficulty_status",
-                    ""
-                ),
-
-            "Discrimination Index":
-                get_value(
-                    item,
-                    "discrimination",
-                    0
-                ),
-
-            "Discrimination Status":
-                get_value(
-                    item,
-                    "discrimination_status",
-                    ""
-                ),
-
-            "Distractor Efficiency (%)":
-                get_value(
-                    item,
-                    "distractor_efficiency",
-                    0
-                ),
-
-            "Non-functional Distractors":
-                ", ".join(
-                    str(x)
-                    for x in nfd
-                )
-                if nfd
-                else "None",
-
-            "Omitted Count":
-                get_value(
-                    item,
-                    "omitted_count",
-                    0
-                ),
-
-            "Omitted (%)":
-                get_value(
-                    item,
-                    "omitted_percentage",
-                    0
-                ),
-
-            "Recommendation":
-                str(
-                    recommendation
-                ).upper()
-        })
-
-    item_df = pd.DataFrame(
-        item_rows
-    )
-
-    # --------------------------------------------------------
-    # OPTION BREAKDOWN
-    # --------------------------------------------------------
-
-    option_rows = []
-
-    for item in items:
-
-        question = get_value(
-            item,
-            "question",
-            ""
-        )
-
-        breakdown = get_value(
-            item,
-            "option_breakdown",
-            []
-        )
-
-        for option in breakdown:
-
-            is_correct = bool(
-                get_value(
-                    option,
-                    "is_correct",
-                    False
-                )
-            )
-
-            is_functional = bool(
-                get_value(
-                    option,
-                    "is_functional",
-                    False
-                )
-            )
-
-            if is_correct:
-
-                status = "Correct Answer"
-
-            elif is_functional:
-
-                status = "Functional Distractor"
-
-            else:
-
-                status = "Non-functional Distractor"
-
-            option_rows.append({
-
-                "Question":
-                    question,
-
-                "Option":
-                    get_value(
-                        option,
-                        "option",
-                        ""
-                    ),
-
-                "Selection Count":
-                    get_value(
-                        option,
-                        "count",
-                        0
-                    ),
-
-                "Percentage":
-                    get_value(
-                        option,
-                        "percentage",
-                        0
-                    ),
-
-                "Status":
-                    status
-            })
-
-    option_df = pd.DataFrame(
-        option_rows
-    )
-
-    # --------------------------------------------------------
-    # SUMMARY
-    # --------------------------------------------------------
-
-    summary_df = pd.DataFrame({
-
-        "Measure": [
-
-            "Total Students",
-
-            "Total Evaluated Items",
-
-            "Mean Score",
-
-            "Standard Deviation",
-
-            "Minimum Score",
-
-            "Maximum Score",
-
-            "Mean Percentage"
-        ],
-
-        "Value": [
-
-            get_value(
-                summary,
-                "total_students",
-                0
-            ),
-
-            get_value(
-                summary,
-                "total_questions",
-                0
-            ),
-
-            get_value(
-                summary,
-                "mean_score",
-                0
-            ),
-
-            get_value(
-                summary,
-                "std_score",
-                0
-            ),
-
-            get_value(
-                summary,
-                "min_score",
-                0
-            ),
-
-            get_value(
-                summary,
-                "max_score",
-                0
-            ),
-
-            get_value(
-                summary,
-                "mean_percentage",
-                0
-            )
-        ]
-    })
-
-    # --------------------------------------------------------
-    # STUDENT RANKING
-    # --------------------------------------------------------
-
-    student_rows = []
-
-    for student in students:
-
-        student_rows.append({
-
-            "Rank":
-                get_value(
-                    student,
-                    "rank",
-                    0
-                ),
-
-            "Student ID":
-                get_value(
-                    student,
-                    "student_id",
-                    ""
-                ),
-
-            "Name":
-                get_value(
-                    student,
-                    "name",
-                    ""
-                ),
-
-            "Score":
-                get_value(
-                    student,
-                    "score",
-                    0
-                ),
-
-            "Percentage":
-                get_value(
-                    student,
-                    "percentage",
-                    0
-                )
-        })
-
-    student_df = pd.DataFrame(
-        student_rows
-    )
-
-    # --------------------------------------------------------
-    # WRITE EXCEL
-    # --------------------------------------------------------
-
-    with pd.ExcelWriter(
-        output,
-        engine="openpyxl"
-    ) as writer:
-
-        item_df.to_excel(
-            writer,
-            sheet_name="Item Analysis",
-            index=False
-        )
-
-        option_df.to_excel(
-            writer,
-            sheet_name="Option Breakdown",
-            index=False
-        )
-
-        summary_df.to_excel(
-            writer,
-            sheet_name="Overall Summary",
-            index=False
-        )
-
-        student_df.to_excel(
-            writer,
-            sheet_name="Student Ranking",
-            index=False
-        )
-
-        # ----------------------------------------------------
-        # FORMATTING
-        # ----------------------------------------------------
-
-        workbook = writer.book
-
-        for worksheet in workbook.worksheets:
-
-            # Freeze first row
-            worksheet.freeze_panes = "A2"
-
-            # Auto-size columns
-            for column_cells in worksheet.columns:
-
-                max_length = 0
-
-                column_letter = (
-                    column_cells[0]
-                    .column_letter
-                )
-
-                for cell in column_cells:
-
-                    try:
-
-                        cell_length = len(
-                            str(
-                                cell.value
-                            )
-                        )
-
-                        max_length = max(
-                            max_length,
-                            cell_length
-                        )
-
-                    except Exception:
-
-                        pass
-
-                worksheet.column_dimensions[
-                    column_letter
-                ].width = min(
-                    max(
-                        max_length + 2,
-                        12
-                    ),
-                    40
-                )
-
-    output.seek(0)
-
-    return output.getvalue()
-
-
-# ============================================================
-# FILE UPLOAD (centered popup, template-guided)
-# ============================================================
-#
-# Each slot shows a single upload button. Clicking it opens a
-# centered modal popup (st.dialog) that strictly explains the
-# required template, offers the sample download, and only lets
-# the user proceed once a file has been chosen. Nothing about
-# the format is buried inline in the page — it's front-and-center
-# in the popup every time.
-
-st.markdown(
-    "### 📥 Load Test Data"
-)
-
-
-def _init_upload_state(prefix):
-
-    if f"{prefix}_confirmed_file" not in st.session_state:
-        st.session_state[f"{prefix}_confirmed_file"] = None
-
-
-def _render_template_popup_body(
-    prefix,
-    label,
-    description_html,
-    template_path,
-    template_download_name
-):
-    """
-    Shared content rendered inside the centered modal popup for
-    a given upload slot (Answer Key / Student Responses).
-    """
-
-    # --------------------------------------------------------
-    # STRICT TEMPLATE NOTICE
-    # --------------------------------------------------------
-
-    st.warning(
-        f"⚠️ **Strict template required.** Your {label.lower()} "
-        "file **must** match the format below exactly, or the "
-        "analysis will fail. Please download and use the sample "
-        "template rather than a file of your own formatting."
-    )
-
-    st.markdown(
-        f"""
-<div class="template-card">
-    <div class="template-card-title">
-        {label}
-        <span class="template-required-badge">Template required</span>
-    </div>
-    <div class="template-card-body">
-        {description_html}
-    </div>
-</div>
-""",
-        unsafe_allow_html=True
-    )
-
-    # --------------------------------------------------------
-    # TEMPLATE DOWNLOAD
-    # --------------------------------------------------------
-
-    template_bytes = load_template_bytes(str(template_path))
-
-    if template_bytes is not None:
-
-        st.download_button(
-            label=f"⬇️ Download sample {label} template",
-            data=template_bytes,
-            file_name=template_download_name,
-            mime=(
-                "application/vnd.openxmlformats-officedocument."
-                "spreadsheetml.sheet"
-            ),
-            key=f"{prefix}_template_download",
-            use_container_width=True
-        )
-
-    else:
-
-        st.warning(
-            f"Sample template file not found at {template_path}."
-        )
-
-    st.markdown("---")
-
-    # --------------------------------------------------------
-    # UPLOADER
-    # --------------------------------------------------------
-
-    pending_file = st.file_uploader(
-        f"Upload your {label} spreadsheet (must match the template above)",
-        type=["xlsx", "xls"],
-        key=f"{prefix}_uploader_dialog"
-    )
-
-    btn_col, cancel_col = st.columns(2)
-
-    with btn_col:
-
-        submit_clicked = st.button(
-            "Use this file",
-            key=f"{prefix}_submit_btn",
-            type="primary",
-            disabled=pending_file is None,
-            use_container_width=True
-        )
-
-    with cancel_col:
-
-        cancel_clicked = st.button(
-            "Cancel",
-            key=f"{prefix}_cancel_btn",
-            use_container_width=True
-        )
-
-    if submit_clicked and pending_file is not None:
-
-        st.session_state[f"{prefix}_confirmed_file"] = pending_file
-        st.rerun()
-
-    if cancel_clicked:
-
-        st.rerun()
-
-
-@st.dialog("📋 Answer Key — Template Required", width="large")
-def _open_answer_key_dialog():
-
-    _render_template_popup_body(
-        prefix="key",
-        label="Answer Key",
-        description_html=(
-            "One row per question with a <code>Question</code> "
-            "column and a <code>Correct Answer</code> column. "
-            "Answers must be <code>A</code>, <code>B</code>, "
-            "<code>C</code>, or <code>D</code>."
-        ),
-        template_path=ANSWER_KEY_TEMPLATE_PATH,
-        template_download_name="Answer_Key_Template.xlsx"
-    )
-
-
-@st.dialog("📋 Student Responses — Template Required", width="large")
-def _open_student_responses_dialog():
-
-    _render_template_popup_body(
-        prefix="data",
-        label="Student Responses",
-        description_html=(
-            "One row per student with <code>Student ID</code> "
-            "and <code>Name</code> columns, followed by one "
-            "column per question, matching the Answer Key."
-        ),
-        template_path=STUDENT_TEMPLATE_PATH,
-        template_download_name="Student_Responses_Template.xlsx"
-    )
-
-
-def render_upload_slot(prefix, label, dialog_opener):
-    """
-    Renders one of the two upload slots (Answer Key / Student
-    Responses):
-
-      1. Just a button, by default.
-      2. Clicking it opens a centered modal popup with the
-         template rules, download link, uploader, and a
-         confirm/cancel choice.
-      3. Once confirmed, collapses to a short "uploaded" summary
-         with a "Change file" option that reopens the popup.
-    """
-
-    _init_upload_state(prefix)
-
-    confirmed_file = st.session_state[f"{prefix}_confirmed_file"]
-
-    # ------------------------------------------------------
-    # STATE 1: FILE ALREADY CONFIRMED
-    # ------------------------------------------------------
-
-    if confirmed_file is not None:
-
-        st.success(
-            f"✅ {label}: **{confirmed_file.name}**"
-        )
-
-        if st.button(
-            f"Change {label.lower()} file",
-            key=f"{prefix}_change_btn",
-            use_container_width=True
-        ):
-
-            st.session_state[f"{prefix}_confirmed_file"] = None
-            dialog_opener()
-
-        return confirmed_file
-
-    # ------------------------------------------------------
-    # STATE 2: SHOW ONLY THE UPLOAD BUTTON — OPENS POPUP
-    # ------------------------------------------------------
-
-    if st.button(
-        f"📤 Upload {label}",
-        key=f"{prefix}_open_btn",
-        type="primary",
-        use_container_width=True
-    ):
-
-        dialog_opener()
+    text = str(value).strip()
+
+    if not text:
+        return None
+
+    # Remove spaces, underscores, hyphens and periods
+    cleaned = re.sub(r"[\s_\-\.]+", "", text)
+
+    # Normal Arabic-number formats
+    patterns = [
+        r"^q(\d+)$",
+        r"^question(\d+)$",
+        r"^ques(\d+)$",
+        r"^qno(\d+)$",
+        r"^no(\d+)$",
+        r"^(\d+)$",
+    ]
+
+    for pattern in patterns:
+        match = re.match(pattern, cleaned, re.IGNORECASE)
+
+        if match:
+            number = int(match.group(1))
+
+            if number > 0:
+                return number
+
+    # Roman numeral support
+    roman_patterns = [
+        (r"^qi$", 1),
+        (r"^qii$", 2),
+        (r"^qiii$", 3),
+        (r"^qiv$", 4),
+        (r"^qv$", 5),
+        (r"^qvi$", 6),
+        (r"^qvii$", 7),
+        (r"^qviii$", 8),
+        (r"^qix$", 9),
+        (r"^qx$", 10),
+    ]
+
+    for pattern, number in roman_patterns:
+        if re.match(pattern, cleaned, re.IGNORECASE):
+            return number
 
     return None
 
 
-col_key, col_data = st.columns(2)
+# ============================================================
+# ANSWER NORMALIZATION
+# ============================================================
 
-with col_key:
+def normalize_answer(value):
+    """
+    Convert a response/answer into A-D.
 
-    key_file = render_upload_slot(
-        prefix="key",
-        label="Answer Key",
-        dialog_opener=_open_answer_key_dialog
+    Accepts:
+        A
+        a
+        A.
+        Option A
+        option a
+        " A "
+    """
+
+    if value is None:
+        return None
+
+    if pd.isna(value):
+        return None
+
+    text = str(value).strip().upper()
+
+    if not text:
+        return None
+
+    # Direct A-D
+    if text in OPTION_LETTERS:
+        return text
+
+    # Remove punctuation
+    cleaned = re.sub(r"[\s\.\)\:\-]+", "", text)
+
+    if cleaned in OPTION_LETTERS:
+        return cleaned
+
+    # Option A / Answer A etc.
+    match = re.search(
+        r"(?:OPTION|ANSWER|CHOICE)?([ABCD])$",
+        cleaned
     )
 
-with col_data:
+    if match:
+        return match.group(1)
 
-    data_file = render_upload_slot(
-        prefix="data",
-        label="Student Responses",
-        dialog_opener=_open_student_responses_dialog
-    )
+    return None
 
 
 # ============================================================
-# ANALYSIS
+# HEADER ROW DETECTION
+# ============================================================
+#
+# The official templates include a title banner and instructions
+# above the real header row, so the header can't be assumed to be
+# row 0. These helpers scan the top of the sheet to locate it.
+
+def _normalize_header_text(value):
+
+    text = re.sub(
+        r"[\s_\-]+",
+        " ",
+        str(value).strip().lower()
+    )
+
+    return text
+
+
+def _find_vertical_answer_key_header(raw_df, max_scan_rows=15):
+    """
+    Scan the top of the answer key sheet for the row containing
+    both a 'Question' style column and a 'Correct Answer' style
+    column (exact match after whitespace normalization).
+
+    Returns (header_row_index, question_col_idx, answer_col_idx)
+    or (None, None, None) if not found.
+    """
+
+    question_candidates = {
+        "question",
+        "question number",
+        "question no",
+        "item",
+        "item number",
+        "item no",
+        "q"
+    }
+
+    answer_candidates = {
+        "correct answer",
+        "correct",
+        "answer",
+        "key",
+        "correct option"
+    }
+
+    scan_limit = min(max_scan_rows, len(raw_df))
+
+    for row_idx in range(scan_limit):
+
+        row = raw_df.iloc[row_idx]
+
+        question_col = None
+        answer_col = None
+
+        for col_idx, value in row.items():
+
+            if value is None or str(value).strip() == "":
+                continue
+
+            text = _normalize_header_text(value)
+
+            if question_col is None and text in question_candidates:
+                question_col = col_idx
+
+            if answer_col is None and text in answer_candidates:
+                answer_col = col_idx
+
+        if question_col is not None and answer_col is not None:
+            return row_idx, question_col, answer_col
+
+    return None, None, None
+
+
+def _detect_wide_format_answer_key(raw_df, max_scan_rows=5):
+    """
+    Look for a header row that instead looks like the (no longer
+    accepted) wide format: Q1, Q2, Q3, ... spread across columns.
+    """
+
+    scan_limit = min(max_scan_rows, len(raw_df))
+
+    for row_idx in range(scan_limit):
+
+        row = raw_df.iloc[row_idx]
+
+        question_like_columns = [
+            col_idx
+            for col_idx, value in row.items()
+            if value is not None
+            and normalize_question_label(value) is not None
+        ]
+
+        if len(question_like_columns) >= 2:
+            return True
+
+    return False
+
+
+def _find_student_response_header(raw_df, max_scan_rows=30):
+    """
+    Scan the top of the student response sheet for the header row:
+    the row that contains a student-name-style column together
+    with at least one question-numbered column.
+
+    Returns the header row index, or None if not found.
+    """
+
+    scan_limit = min(max_scan_rows, len(raw_df))
+
+    for row_idx in range(scan_limit):
+
+        row = raw_df.iloc[row_idx]
+
+        has_name_cue = False
+        question_col_count = 0
+
+        for value in row.values:
+
+            if value is None or str(value).strip() == "":
+                continue
+
+            text = _normalize_header_text(value)
+
+            if "name" in text:
+                has_name_cue = True
+
+            if normalize_question_label(value) is not None:
+                question_col_count += 1
+
+        if has_name_cue and question_col_count >= 1:
+            return row_idx
+
+    return None
+
+
+# ============================================================
+# EXAM INFO BANNER
+# ============================================================
+#
+# The official student response template has an optional
+# "EXAM INFORMATION" banner above the real header row, e.g.:
+#
+#   EXAM INFORMATION
+#
+#   Examination Name :   Mid-Term Examination
+#   Examination Year :   2026
+#   Class :
+#   Subject :
+#
+# This is scanned out here (independent of the header-row
+# detection) so it can be carried through to the analysis
+# results and stamped onto the downloaded report.
+
+EXAM_INFO_FIELD_LOOKUP = {
+    "examination name": "Examination Name",
+    "exam name": "Examination Name",
+    "examination title": "Examination Name",
+    "examination year": "Examination Year",
+    "exam year": "Examination Year",
+    "year": "Examination Year",
+    "class": "Class",
+    "grade": "Class",
+    "section": "Class",
+    "class section": "Class",
+    "subject": "Subject",
+    "course": "Subject",
+}
+
+EXAM_INFO_FIELDS = [
+    "Examination Name",
+    "Examination Year",
+    "Class",
+    "Subject"
+]
+
+
+def _extract_exam_info(raw_df, header_row_idx):
+    """
+    Scan the rows above the detected header row for label/value
+    pairs matching the exam-information banner fields. Returns a
+    dict with all of EXAM_INFO_FIELDS present, defaulting to ""
+    for anything not found or left blank by the user.
+    """
+
+    exam_info = {
+        field: ""
+        for field in EXAM_INFO_FIELDS
+    }
+
+    if header_row_idx is None:
+        scan_limit = len(raw_df)
+    else:
+        scan_limit = min(header_row_idx, len(raw_df))
+
+    for row_idx in range(scan_limit):
+
+        row = raw_df.iloc[row_idx]
+
+        row_values = [
+            value
+            for value in row.values
+            if value is not None
+            and not pd.isna(value)
+            and str(value).strip() != ""
+        ]
+
+        if not row_values:
+            continue
+
+        label_raw = str(row_values[0]).strip()
+
+        label_clean = re.sub(
+            r"[:\s]+$",
+            "",
+            label_raw
+        ).strip().lower()
+
+        label_clean = re.sub(
+            r"[\s_\-]+",
+            " ",
+            label_clean
+        )
+
+        if label_clean not in EXAM_INFO_FIELD_LOOKUP:
+            continue
+
+        field_name = EXAM_INFO_FIELD_LOOKUP[label_clean]
+
+        if len(row_values) >= 2:
+            value = str(row_values[1]).strip()
+        else:
+            value = ""
+
+        # Keep the first non-blank value found for each field.
+        if value and not exam_info[field_name]:
+            exam_info[field_name] = value
+
+    return exam_info
+
+
+# ============================================================
+# ITEM ANALYZER
 # ============================================================
 
-if key_file and data_file:
+class ItemAnalyzer:
 
-    if st.button(
-        "Run Analysis",
-        type="primary",
-        use_container_width=True
-    ):
+    def __init__(self):
 
-        with st.spinner(
-            "Processing analysis files..."
-        ):
+        self.answer_key = {}
+        self.answer_key_labels = {}
 
-            try:
+        self.student_data = None
+        self.scores = None
 
-                # ====================================================
-                # TEMPORARY FILES
-                # ====================================================
+        self.total_students = 0
+        self.total_questions = 0
 
-                with tempfile.TemporaryDirectory() as tmp_dir:
-
-                    tmp_path = Path(
-                        tmp_dir
-                    )
-
-                    key_path = (
-                        tmp_path
-                        / "key.xlsx"
-                    )
-
-                    data_path = (
-                        tmp_path
-                        / "data.xlsx"
-                    )
-
-                    key_path.write_bytes(
-                        key_file.getvalue()
-                    )
-
-                    data_path.write_bytes(
-                        data_file.getvalue()
-                    )
-
-                    # =================================================
-                    # ANALYZER
-                    # =================================================
-
-                    analyzer = ItemAnalyzer()
-
-                    raw_results = (
-                        analyzer.run_analysis(
-                            str(key_path),
-                            str(data_path)
-                        )
-                    )
-
-                # ====================================================
-                # SANITIZE
-                # ====================================================
-
-                results = sanitize(
-                    raw_results
-                )
-
-                # Store results in session state
-                # so they remain available after download.
-                st.session_state[
-                    "analysis_results"
-                ] = results
-
-                st.success(
-                    "✅ Analysis completed successfully."
-                )
-
-            except ValueError as e:
-
-                st.markdown(
-                    f"""
-<div class="template-error-card">
-    <div class="template-error-title">
-        ⚠️ File doesn't match the required template
-    </div>
-    <div class="template-error-body">{html.escape(str(e))}</div>
-</div>
-""",
-                    unsafe_allow_html=True
-                )
-
-                st.caption(
-                    "Download the sample templates above, fill in "
-                    "your data using the same columns, and "
-                    "re-upload."
-                )
-
-            except Exception as e:
-
-                st.error(
-                    f"❌ Computational Execution Failure: {e}"
-                )
-
-                with st.expander(
-                    "🔍 Technical Error Details",
-                    expanded=True
-                ):
-
-                    st.exception(e)
-
-
-# ============================================================
-# DISPLAY RESULTS
-# ============================================================
-
-if (
-    "analysis_results"
-    in st.session_state
-):
-
-    results = st.session_state[
-        "analysis_results"
-    ]
+        self.exam_info = {
+            field: ""
+            for field in EXAM_INFO_FIELDS
+        }
 
     # ========================================================
-    # GLOBAL SUMMARY
+    # LOAD ANSWER KEY
     # ========================================================
 
-    summary = get_value(
-        results,
-        "summary",
-        {}
-    )
+    def load_answer_key(self, excel_file):
 
-    st.markdown(
-        "### Overall Summary"
-    )
+        xl_file = pd.ExcelFile(excel_file)
 
-    metric_col1, metric_col2, metric_col3 = st.columns(3)
+        if not xl_file.sheet_names:
+            raise ValueError("The answer key workbook contains no worksheets.")
 
-    with metric_col1:
+        sheet_name = xl_file.sheet_names[0]
 
-        st.metric(
-            "Total Students",
-            get_value(
-                summary,
-                "total_students",
-                0
+        # Read with no assumed header, since the official template
+        # has a title banner and instructions above the real
+        # 'Question' / 'Correct Answer' header row.
+        raw_df = pd.read_excel(
+            excel_file,
+            sheet_name=sheet_name,
+            header=None
+        )
+
+        if raw_df.empty and len(raw_df.columns) == 0:
+            raise ValueError(
+                "The answer key sheet is empty."
             )
-        )
 
-    with metric_col2:
-
-        st.metric(
-            "Total Evaluated Items",
-            get_value(
-                summary,
-                "total_questions",
-                0
-            )
-        )
-
-    with metric_col3:
-
-        mean_score = get_value(
-            summary,
-            "mean_score",
-            0
-        )
-
-        total_questions = get_value(
-            summary,
-            "total_questions",
-            0
-        )
-
-        st.metric(
-            "Mean Score",
-            f"{float(mean_score):.2f} / {total_questions}"
-        )
-
-    # ========================================================
-    # SECOND SUMMARY ROW
-    # ========================================================
-
-    metric_col4, metric_col5, metric_col6 = st.columns(3)
-
-    with metric_col4:
-
-        st.metric(
-            "Standard Deviation",
-            f"{float(get_value(summary, 'std_score', 0)):.2f}"
-        )
-
-    with metric_col5:
-
-        st.metric(
-            "Minimum Score",
-            get_value(
-                summary,
-                "min_score",
-                0
-            )
-        )
-
-    with metric_col6:
-
-        st.metric(
-            "Maximum Score",
-            get_value(
-                summary,
-                "max_score",
-                0
-            )
-        )
-
-    # ========================================================
-    # DOWNLOAD REPORT
-    # ========================================================
-
-    st.markdown("---")
-
-    st.markdown(
-        "### 📥 Download Analysis Report"
-    )
-
-    report_bytes = create_excel_report(
-        results
-    )
-
-    st.download_button(
-        label="⬇️ Download Complete Item Analysis Report",
-        data=report_bytes,
-        file_name="Item_Analysis_Report.xlsx",
-        mime=(
-            "application/vnd.openxmlformats-officedocument."
-            "spreadsheetml.sheet"
-        ),
-        type="primary",
-        use_container_width=True
-    )
-
-    st.caption(
-        "The report contains Item Analysis first, followed by "
-        "Option Breakdown, Overall Summary, and Student Ranking."
-    )
-
-    # ========================================================
-    # ITEM ANALYSIS
-    # ========================================================
-
-    st.markdown("---")
-
-    st.markdown(
-        "### 🔬 Item-Wise Analysis"
-    )
-
-    st.caption(
-        "Each question is evaluated individually for difficulty, "
-        "discrimination, distractor efficiency, and final recommendation."
-    )
-
-    items = get_value(
-        results,
-        "items",
-        []
-    )
-
-    if not isinstance(
-        items,
-        list
-    ):
-
-        items = list(items)
-
-    # ========================================================
-    # RECOMMENDATION SUMMARY
-    # ========================================================
-
-    retain_count = 0
-    review_count = 0
-    revise_count = 0
-    discard_count = 0
-
-    for item in items:
-
-        recommendation = str(
-            get_value(
-                item,
-                "recommendation",
-                ""
-            )
-        ).upper()
-
-        if recommendation == "RETAIN":
-            retain_count += 1
-
-        elif recommendation == "REVIEW":
-            review_count += 1
-
-        elif recommendation == "REVISE":
-            revise_count += 1
-
-        elif recommendation == "DISCARD":
-            discard_count += 1
-
-    rec1, rec2, rec3, rec4 = st.columns(4)
-
-    with rec1:
-        st.metric(
-            "✅ Retain",
-            retain_count
-        )
-
-    with rec2:
-        st.metric(
-            "🟡 Review",
-            review_count
-        )
-
-    with rec3:
-        st.metric(
-            "🟠 Revise",
-            revise_count
-        )
-
-    with rec4:
-        st.metric(
-            "🔴 Discard",
-            discard_count
-        )
-
-    # ========================================================
-    # QUESTION LOOP
-    # ========================================================
-
-    for index, item in enumerate(
-        items,
-        start=1
-    ):
-
-        question = get_value(
-            item,
-            "question",
-            f"Question {index}"
-        )
-
-        recommendation = get_value(
-            item,
-            "recommendation",
-            "REVIEW"
-        )
-
-        recommendation = str(
-            recommendation
-        ).upper()
+        self.answer_key = {}
+        self.answer_key_labels = {}
 
         # ----------------------------------------------------
-        # EXPANDER
+        # ONLY ACCEPTED FORMAT: VERTICAL
+        #
+        # Question | Correct Answer
+        # Q1       | A
+        # Q2       | B
         # ----------------------------------------------------
 
-        with st.expander(
-            f"{question} — {recommendation}",
-            expanded=False
-        ):
+        header_row_idx, question_col, answer_col = (
+            _find_vertical_answer_key_header(raw_df)
+        )
 
-            # =================================================
-            # RECOMMENDATION
-            # =================================================
+        # ----------------------------------------------------
+        # DETECT A WIDE-FORMAT UPLOAD AND REJECT IT EXPLICITLY
+        #
+        # If the sheet looks like Q1 Q2 Q3 ... across a header
+        # row instead of Question/Correct Answer columns, give a
+        # specific message rather than falling through to the
+        # generic "no questions found" error.
+        # ----------------------------------------------------
 
-            st.markdown(
-                recommendation_badge(
-                    recommendation
-                ),
-                unsafe_allow_html=True
+        if header_row_idx is None:
+
+            if _detect_wide_format_answer_key(raw_df):
+
+                raise ValueError(
+                    "This answer key is in the wide format "
+                    "(one column per question), which is no "
+                    "longer accepted.\n\n"
+                    "Please use the vertical format instead: a "
+                    "'Question' column and a 'Correct Answer' "
+                    "column, with one row per question.\n\n"
+                    "Download the sample Answer Key template to "
+                    "see the required layout."
+                )
+
+            raise ValueError(
+                "Could not find the required columns in the "
+                "answer key.\n\n"
+                "The sheet must contain a 'Question' column and "
+                "a 'Correct Answer' column, with one row per "
+                "question.\n\n"
+                "Download the sample Answer Key template to see "
+                "the required layout."
             )
 
-            st.markdown("")
+        data_rows = raw_df.iloc[header_row_idx + 1:]
 
-            # =================================================
-            # BASIC ITEM INFORMATION
-            # =================================================
+        for _, row in data_rows.iterrows():
 
-            info1, info2, info3 = st.columns(3)
-
-            with info1:
-
-                st.write(
-                    f"**Correct Answer:** "
-                    f"`{get_value(item, 'correct_answer', '')}`"
-                )
-
-            with info2:
-
-                st.write(
-                    f"**Correct Responses:** "
-                    f"`{get_value(item, 'correct_count', 0)}` "
-                    f"/ "
-                    f"`{get_value(item, 'total_students', 0)}`"
-                )
-
-            with info3:
-
-                st.write(
-                    f"**Omitted Responses:** "
-                    f"`{get_value(item, 'omitted_count', 0)}` "
-                    f""
-                )
-
-            # =================================================
-            # METRICS
-            # =================================================
-
-            st.markdown("---")
-
-            gauge1, gauge2 = st.columns(2)
-
-            # -------------------------------------------------
-            # DIFFICULTY
-            # -------------------------------------------------
-
-            with gauge1:
-
-                difficulty = get_value(
-                    item,
-                    "difficulty",
-                    0.0
-                )
-
-                try:
-
-                    difficulty = float(
-                        difficulty
-                    )
-
-                except (
-                    TypeError,
-                    ValueError
-                ):
-
-                    difficulty = 0.0
-
-                difficulty_status = get_value(
-                    item,
-                    "difficulty_status",
-                    "N/A"
-                )
-
-                st.metric(
-                    "Difficulty Index",
-                    f"{difficulty:.3f}",
-                    delta=str(
-                        difficulty_status
-                    ),
-                    delta_color="off"
-                )
-
-                st.progress(
-                    max(
-                        0.0,
-                        min(
-                            1.0,
-                            difficulty
-                        )
-                    )
-                )
-
-                st.caption(
-                    "Proportion of students who answered correctly."
-                )
-
-            # -------------------------------------------------
-            # DISCRIMINATION
-            # -------------------------------------------------
-
-            with gauge2:
-
-                discrimination = get_value(
-                    item,
-                    "discrimination",
-                    0.0
-                )
-
-                try:
-
-                    discrimination = float(
-                        discrimination
-                    )
-
-                except (
-                    TypeError,
-                    ValueError
-                ):
-
-                    discrimination = 0.0
-
-                discrimination_status = get_value(
-                    item,
-                    "discrimination_status",
-                    "N/A"
-                )
-
-                st.metric(
-                    "Discrimination Index",
-                    f"{discrimination:.3f}",
-                    delta=str(
-                        discrimination_status
-                    ),
-                    delta_color="off"
-                )
-
-                # Convert -1..+1 to 0..1
-                normalized_discrimination = (
-                    discrimination + 1
-                ) / 2
-
-                st.progress(
-                    max(
-                        0.0,
-                        min(
-                            1.0,
-                            normalized_discrimination
-                        )
-                    )
-                )
-
-                st.caption(
-                    "Difference between upper and lower group performance."
-                )
-
-            # =================================================
-            # DISTRACTOR METRICS
-            # =================================================
-
-            st.markdown("---")
-
-            extra1, extra2 = st.columns(2)
-
-            with extra1:
-
-                efficiency = get_value(
-                    item,
-                    "distractor_efficiency",
-                    0.0
-                )
-
-                try:
-
-                    efficiency = float(
-                        efficiency
-                    )
-
-                except (
-                    TypeError,
-                    ValueError
-                ):
-
-                    efficiency = 0.0
-
-                st.metric(
-                    "Distractor Efficiency",
-                    f"{efficiency:.0f}%"
-                )
-
-            with extra2:
-
-                nfd_list = get_value(
-                    item,
-                    "non_functional_distractors",
-                    []
-                )
-
-                if nfd_list:
-
-                    st.write(
-                        "**Non-functional Distractors:**"
-                    )
-
-                    st.error(
-                        ", ".join(
-                            str(x)
-                            for x in nfd_list
-                        )
-                    )
-
-                else:
-
-                    st.write(
-                        "**Non-functional Distractors:**"
-                    )
-
-                    st.success(
-                        "None"
-                    )
-
-            # =================================================
-            # RESPONSE DISTRIBUTION
-            # =================================================
-
-            st.markdown("---")
-
-            st.markdown(
-                "#### Response Distribution"
+            question_number = normalize_question_label(
+                row[question_col]
             )
 
-            breakdown = get_value(
-                item,
-                "option_breakdown",
-                []
+            answer = normalize_answer(
+                row[answer_col]
             )
 
-            if breakdown is None:
+            if question_number is not None and answer is not None:
 
-                breakdown = []
+                self.answer_key[question_number] = answer
 
-            # -------------------------------------------------
-            # BAR
-            # -------------------------------------------------
+                self.answer_key_labels[
+                    question_number
+                ] = str(
+                    row[question_col]
+                ).strip()
 
-            bar_html = (
-                '<div class="dist-container">'
+        # ----------------------------------------------------
+        # VALIDATION
+        # ----------------------------------------------------
+
+        self.total_questions = len(self.answer_key)
+
+        if self.total_questions == 0:
+
+            raise ValueError(
+                "No valid questions were found in the answer key.\n\n"
+                "The system accepts question labels such as:\n"
+                "Q1, q1, Q01, q01, Question 1, question1, 1, etc.\n\n"
+                "Each question must have a correct answer of A, B, C or D."
             )
 
-            for option in breakdown:
+        # Sort question numbers
+        self.answer_key = dict(
+            sorted(
+                self.answer_key.items(),
+                key=lambda x: x[0]
+            )
+        )
 
-                percentage = get_value(
-                    option,
-                    "percentage",
-                    0
-                )
+    # ========================================================
+    # LOAD STUDENT RESPONSES
+    # ========================================================
 
-                option_label = get_value(
-                    option,
-                    "option",
-                    ""
-                )
+    def load_student_responses(self, excel_file):
 
-                try:
+        if self.total_questions == 0:
 
-                    percentage = float(
-                        percentage
-                    )
+            raise ValueError(
+                "Load the answer key before loading student responses."
+            )
 
-                except (
-                    TypeError,
-                    ValueError
-                ):
+        xl_file = pd.ExcelFile(excel_file)
 
-                    percentage = 0.0
+        if not xl_file.sheet_names:
 
-                if percentage <= 0:
+            raise ValueError(
+                "The student response workbook contains no worksheets."
+            )
 
+        sheet_name = xl_file.sheet_names[0]
+
+        # Read with no assumed header, since the official template
+        # has an exam-information banner above the real header row
+        # (Student ID / Name of the Student / ... / 1 / 2 / 3 ...).
+        raw_df = pd.read_excel(
+            excel_file,
+            sheet_name=sheet_name,
+            header=None
+        )
+
+        if raw_df.empty:
+
+            raise ValueError(
+                "The student response sheet contains no student records."
+            )
+
+        header_row_idx = _find_student_response_header(raw_df)
+
+        if header_row_idx is None:
+
+            raise ValueError(
+                "Could not find the required header row in the "
+                "student response sheet.\n\n"
+                "The sheet must contain a student Name column "
+                "followed by one column per question, matching "
+                "the answer key.\n\n"
+                "Download the sample Student Responses template "
+                "to see the required layout."
+            )
+
+        self.exam_info = _extract_exam_info(
+            raw_df,
+            header_row_idx
+        )
+
+        header_row = raw_df.iloc[header_row_idx]
+
+        df = raw_df.iloc[header_row_idx + 1:].reset_index(drop=True)
+
+        if df.empty:
+
+            raise ValueError(
+                "The student response sheet contains no student records."
+            )
+
+        # ----------------------------------------------------
+        # IDENTIFY ID / NAME / SCORE COLUMNS
+        # ----------------------------------------------------
+
+        normalized = {}
+
+        for col in raw_df.columns:
+
+            value = header_row[col]
+
+            if value is None or str(value).strip() == "":
+                continue
+
+            key = re.sub(
+                r"[\s_\-]+",
+                " ",
+                str(value).strip().lower()
+            )
+
+            if key not in normalized:
+                normalized[key] = col
+
+        id_candidates = [
+            "student id",
+            "studentid",
+            "student no",
+            "student number",
+            "id",
+            "roll no",
+            "roll number",
+            "roll"
+        ]
+
+        name_candidates = [
+            "name",
+            "student name",
+            "student"
+        ]
+
+        score_candidates = [
+            "score",
+            "total score",
+            "total",
+            "marks",
+            "total marks",
+            "overall score",
+            "overall marks"
+        ]
+
+        id_col = None
+        name_col = None
+        score_col = None
+
+        for candidate in id_candidates:
+
+            if candidate in normalized:
+
+                id_col = normalized[candidate]
+                break
+
+        for candidate in name_candidates:
+
+            if candidate in normalized:
+
+                name_col = normalized[candidate]
+                break
+
+        for candidate in score_candidates:
+
+            if candidate in normalized:
+
+                score_col = normalized[candidate]
+                break
+
+        # ----------------------------------------------------
+        # FALLBACKS
+        # ----------------------------------------------------
+
+        if name_col is None:
+
+            # Look for a column containing "name"
+            for col in raw_df.columns:
+
+                value = header_row[col]
+
+                if value is not None and "name" in str(value).lower():
+
+                    name_col = col
+                    break
+
+        if id_col is None:
+
+            # Look for roll/student/id
+            for col in raw_df.columns:
+
+                value = header_row[col]
+
+                if value is None:
                     continue
 
-                is_correct = bool(
-                    get_value(
-                        option,
-                        "is_correct",
-                        False
-                    )
-                )
+                lower = str(value).lower()
 
-                is_functional = bool(
-                    get_value(
-                        option,
-                        "is_functional",
-                        False
-                    )
-                )
-
-                if is_correct:
-
-                    background = "#2F8F5B"
-
-                elif is_functional:
-
-                    background = "#2C5F8A"
-
-                else:
-
-                    background = "#B23A32"
-
-                label = (
-                    str(option_label)
-                    if percentage >= 5
-                    else ""
-                )
-
-                safe_label = html.escape(
-                    label
-                )
-
-                bar_html += (
-                    '<div '
-                    'class="dist-segment" '
-                    f'style="flex: {percentage} 0 auto; '
-                    f'background-color: {background};" '
-                    f'title="{safe_label}: '
-                    f'{percentage:.1f}%">'
-                    f'{safe_label}'
-                    '</div>'
-                )
-
-            # -------------------------------------------------
-            # OMITTED
-            # -------------------------------------------------
-
-            omitted_count = get_value(
-                item,
-                "omitted_count",
-                0
-            )
-
-            omitted_percentage = get_value(
-                item,
-                "omitted_percentage",
-                0
-            )
-
-            try:
-
-                omitted_count = int(
-                    omitted_count
-                )
-
-            except (
-                TypeError,
-                ValueError
-            ):
-
-                omitted_count = 0
-
-            try:
-
-                omitted_percentage = float(
-                    omitted_percentage
-                )
-
-            except (
-                TypeError,
-                ValueError
-            ):
-
-                omitted_percentage = 0.0
-
-            if (
-                omitted_count > 0
-                and
-                omitted_percentage > 0
-            ):
-
-                bar_html += (
-                    '<div '
-                    'class="dist-segment" '
-                    f'style="flex: '
-                    f'{omitted_percentage} 0 auto; '
-                    'background-color: #92A0BD;" '
-                    f'title="Omitted: '
-                    f'{omitted_percentage:.1f}%">'
-                    '—'
-                    '</div>'
-                )
-
-            bar_html += "</div>"
-
-            st.markdown(
-                bar_html,
-                unsafe_allow_html=True
-            )
-
-            # =================================================
-            # OPTION TABLE
-            # =================================================
-
-            st.markdown(
-                "#### Option Breakdown"
-            )
-
-            grid_data = []
-
-            for option in breakdown:
-
-                is_correct = bool(
-                    get_value(
-                        option,
-                        "is_correct",
-                        False
-                    )
-                )
-
-                is_functional = bool(
-                    get_value(
-                        option,
-                        "is_functional",
-                        False
-                    )
-                )
-
-                if is_correct:
-
-                    role = "✅ Correct Answer"
-
-                elif is_functional:
-
-                    role = "✓ Functional Distractor"
-
-                else:
-
-                    role = "❌ Non-functional Distractor"
-
-                percentage = get_value(
-                    option,
-                    "percentage",
-                    0
-                )
-
-                try:
-
-                    percentage = float(
-                        percentage
-                    )
-
-                except (
-                    TypeError,
-                    ValueError
+                if (
+                    "student" in lower
+                    or "roll" in lower
+                    or lower == "id"
                 ):
 
-                    percentage = 0.0
+                    id_col = col
+                    break
 
-                grid_data.append({
+        if name_col is None:
 
-                    "Option":
-                        get_value(
-                            option,
-                            "option",
-                            ""
+            raise ValueError(
+                "Could not find a student Name column.\n\n"
+                "Please include a column such as:\n"
+                "Name, Student Name, or Student."
+            )
+
+        # ----------------------------------------------------
+        # MAP QUESTION COLUMNS
+        # ----------------------------------------------------
+
+        question_columns = {}
+
+        for col in raw_df.columns:
+
+            value = header_row[col]
+
+            question_number = normalize_question_label(value)
+
+            if question_number is None:
+                continue
+
+            # Only retain questions that exist in answer key
+            if question_number in self.answer_key:
+
+                # If duplicate representations exist, first one wins
+                if question_number not in question_columns:
+
+                    question_columns[
+                        question_number
+                    ] = col
+
+        # ----------------------------------------------------
+        # CHECK FOR MISSING QUESTIONS
+        # ----------------------------------------------------
+
+        missing_questions = [
+            number
+            for number in self.answer_key
+            if number not in question_columns
+        ]
+
+        # Missing question columns are allowed because the user
+        # may have uploaded incomplete data, but we report them.
+        if missing_questions:
+
+            print(
+                "Warning: Missing student response columns:",
+                missing_questions
+            )
+
+        # ----------------------------------------------------
+        # BUILD STUDENT DATA
+        # ----------------------------------------------------
+
+        student_list = []
+
+        question_numbers = list(
+            self.answer_key.keys()
+        )
+
+        for row_index, row in df.iterrows():
+
+            # Student ID
+            if id_col is not None:
+
+                student_id_value = row[id_col]
+
+                if pd.isna(student_id_value):
+
+                    student_id = str(
+                        row_index + 1
+                    )
+
+                else:
+
+                    student_id = str(
+                        student_id_value
+                    ).strip()
+
+            else:
+
+                student_id = str(
+                    row_index + 1
+                )
+
+            # Name
+            name_value = row[name_col]
+
+            if pd.isna(name_value):
+
+                student_name = f"Student {row_index + 1}"
+
+            else:
+
+                student_name = str(
+                    name_value
+                ).strip()
+
+            # Provided overall score
+            provided_score = None
+
+            if score_col is not None:
+
+                score_value = row[score_col]
+
+                if pd.notna(score_value):
+
+                    try:
+
+                        provided_score = float(
+                            score_value
+                        )
+
+                    except (
+                        ValueError,
+                        TypeError
+                    ):
+
+                        provided_score = None
+
+            # Responses
+            responses = []
+
+            for question_number in question_numbers:
+
+                if question_number in question_columns:
+
+                    response_value = row[
+                        question_columns[question_number]
+                    ]
+
+                    response = normalize_answer(
+                        response_value
+                    )
+
+                else:
+
+                    response = None
+
+                responses.append(response)
+
+            student_list.append({
+                "student_id": student_id,
+                "name": student_name,
+                "responses": responses,
+                "provided_score": provided_score
+            })
+
+        self.student_data = pd.DataFrame(
+            student_list
+        )
+
+        self.total_students = len(
+            self.student_data
+        )
+
+        if self.total_students == 0:
+
+            raise ValueError(
+                "No student records were found in the response file."
+            )
+
+    # ========================================================
+    # CALCULATE STUDENT SCORES
+    # ========================================================
+
+    def calculate_scores(self):
+
+        if self.student_data is None:
+
+            raise ValueError(
+                "Student response data has not been loaded."
+            )
+
+        scores = []
+
+        question_numbers = list(
+            self.answer_key.keys()
+        )
+
+        for responses in self.student_data["responses"]:
+
+            correct = 0
+
+            for index, question_number in enumerate(
+                question_numbers
+            ):
+
+                if index >= len(responses):
+                    continue
+
+                if (
+                    responses[index]
+                    == self.answer_key[question_number]
+                ):
+
+                    correct += 1
+
+            scores.append(correct)
+
+        self.scores = np.array(
+            scores,
+            dtype=int
+        )
+
+        self.student_data["score"] = self.scores
+
+        if self.total_questions > 0:
+
+            self.student_data["percentage"] = np.round(
+                self.scores
+                / self.total_questions
+                * 100,
+                1
+            )
+
+        else:
+
+            self.student_data["percentage"] = 0.0
+
+    # ========================================================
+    # ITEM STATISTICS
+    # ========================================================
+
+    def calculate_item_statistics(self):
+
+        if self.scores is None:
+
+            self.calculate_scores()
+
+        if self.total_students == 0:
+
+            return []
+
+        group_size = max(
+            1,
+            int(
+                self.total_students * 0.27
+            )
+        )
+
+        # ----------------------------------------------------
+        # GROUPING SCORE
+        #
+        # Use provided overall score when available.
+        # Otherwise use MCQ score.
+        # ----------------------------------------------------
+
+        if (
+            "provided_score"
+            in self.student_data.columns
+            and
+            self.student_data[
+                "provided_score"
+            ].notna().all()
+        ):
+
+            grouping_scores = (
+                self.student_data[
+                    "provided_score"
+                ].to_numpy()
+            )
+
+        else:
+
+            grouping_scores = self.scores
+
+        sorted_indices = np.argsort(
+            -grouping_scores
+        )
+
+        upper_group = sorted_indices[
+            :group_size
+        ]
+
+        lower_group = sorted_indices[
+            -group_size:
+        ]
+
+        item_stats = []
+
+        question_numbers = list(
+            self.answer_key.keys()
+        )
+
+        # ====================================================
+        # EACH ITEM
+        # ====================================================
+
+        for index, question_number in enumerate(
+            question_numbers
+        ):
+
+            correct_answer = self.answer_key[
+                question_number
+            ]
+
+            # ------------------------------------------------
+            # CORRECT COUNT
+            # ------------------------------------------------
+
+            correct_count = 0
+
+            for responses in self.student_data[
+                "responses"
+            ]:
+
+                if (
+                    index < len(responses)
+                    and
+                    responses[index]
+                    == correct_answer
+                ):
+
+                    correct_count += 1
+
+            # ------------------------------------------------
+            # UPPER GROUP
+            # ------------------------------------------------
+
+            upper_correct = 0
+
+            for student_index in upper_group:
+
+                responses = self.student_data.iloc[
+                    student_index
+                ]["responses"]
+
+                if (
+                    index < len(responses)
+                    and
+                    responses[index]
+                    == correct_answer
+                ):
+
+                    upper_correct += 1
+
+            # ------------------------------------------------
+            # LOWER GROUP
+            # ------------------------------------------------
+
+            lower_correct = 0
+
+            for student_index in lower_group:
+
+                responses = self.student_data.iloc[
+                    student_index
+                ]["responses"]
+
+                if (
+                    index < len(responses)
+                    and
+                    responses[index]
+                    == correct_answer
+                ):
+
+                    lower_correct += 1
+
+            # ------------------------------------------------
+            # DIFFICULTY
+            # ------------------------------------------------
+            #
+            # Status/recommendation logic below always uses the
+            # raw (unrounded) value, so rounding to 1 decimal for
+            # display never shifts an item across a threshold.
+
+            difficulty_raw = (
+                correct_count
+                / self.total_students
+            )
+
+            difficulty = round(
+                difficulty_raw,
+                1
+            )
+
+            # ------------------------------------------------
+            # DISCRIMINATION
+            # ------------------------------------------------
+
+            discrimination_raw = (
+                upper_correct / group_size
+            ) - (
+                lower_correct / group_size
+            )
+
+            discrimination = round(
+                discrimination_raw,
+                1
+            )
+
+            # ------------------------------------------------
+            # DIFFICULTY STATUS
+            # ------------------------------------------------
+
+            if difficulty_raw < 0.20:
+
+                difficulty_status = "Very Difficult"
+
+            elif difficulty_raw > 0.80:
+
+                difficulty_status = "Too Easy"
+
+            else:
+
+                difficulty_status = "Ideal"
+
+            # ------------------------------------------------
+            # DISCRIMINATION STATUS
+            # ------------------------------------------------
+
+            if discrimination_raw < 0:
+
+                discrimination_status = "Negative"
+
+            elif discrimination_raw < 0.20:
+
+                discrimination_status = "Poor"
+
+            elif discrimination_raw < 0.30:
+
+                discrimination_status = "Fair"
+
+            else:
+
+                discrimination_status = "Good"
+
+            # ------------------------------------------------
+            # OPTION COUNTS
+            # ------------------------------------------------
+
+            option_counts = {
+                option: 0
+                for option in OPTION_LETTERS
+            }
+
+            omitted_count = 0
+
+            for responses in self.student_data[
+                "responses"
+            ]:
+
+                if index >= len(responses):
+
+                    omitted_count += 1
+                    continue
+
+                response = responses[index]
+
+                if response in option_counts:
+
+                    option_counts[
+                        response
+                    ] += 1
+
+                else:
+
+                    omitted_count += 1
+
+            # ------------------------------------------------
+            # DISTRACTOR ANALYSIS
+            # ------------------------------------------------
+
+            option_breakdown = []
+
+            non_functional_distractors = []
+
+            distractor_total = 0
+            functional_distractor_count = 0
+
+            for option in OPTION_LETTERS:
+
+                count = option_counts[
+                    option
+                ]
+
+                percentage_raw = (
+                    count
+                    / self.total_students
+                    * 100
+                )
+
+                percentage = round(
+                    percentage_raw,
+                    1
+                )
+
+                is_correct = (
+                    option
+                    == correct_answer
+                )
+
+                if is_correct:
+
+                    is_functional = True
+
+                else:
+
+                    distractor_total += 1
+
+                    is_functional = (
+                        percentage_raw
+                        >= (
+                            NON_FUNCTIONAL_THRESHOLD
+                            * 100
+                        )
+                    )
+
+                    if is_functional:
+
+                        functional_distractor_count += 1
+
+                    else:
+
+                        non_functional_distractors.append(
+                            option
+                        )
+
+                option_breakdown.append(
+                    DistractorOption(
+                        option=option,
+                        count=int(count),
+                        percentage=float(
+                            percentage
                         ),
+                        is_correct=is_correct,
+                        is_functional=is_functional
+                    )
+                )
 
-                    "Selection Count":
-                        get_value(
-                            option,
-                            "count",
-                            0
-                        ),
+            # ------------------------------------------------
+            # DISTRACTOR EFFICIENCY
+            # ------------------------------------------------
 
-                    "Distribution":
-                        f"{percentage:.1f}%",
+            if distractor_total > 0:
 
-                    "Diagnostic Evaluation":
-                        role
-                })
-
-            if grid_data:
-
-                st.table(
-                    grid_data
+                distractor_efficiency = round(
+                    functional_distractor_count
+                    / distractor_total
+                    * 100,
+                    1
                 )
 
             else:
 
-                st.info(
-                    "No option breakdown data was returned."
+                distractor_efficiency = 0.0
+
+            # ------------------------------------------------
+            # OMITTED
+            # ------------------------------------------------
+
+            omitted_percentage = round(
+                omitted_count
+                / self.total_students
+                * 100,
+                1
+            )
+
+            # ------------------------------------------------
+            # RECOMMENDATION
+            # ------------------------------------------------
+
+            if discrimination_raw < 0:
+
+                recommendation = (
+                    ItemRecommendation.DISCARD
                 )
 
-    # ========================================================
-    # FINAL RECOMMENDATION SUMMARY
-    # ========================================================
+            elif (
+                discrimination_raw < 0.20
+                and
+                (
+                    difficulty_raw < 0.20
+                    or
+                    difficulty_raw > 0.80
+                )
+            ):
 
-    st.markdown("---")
+                recommendation = (
+                    ItemRecommendation.REVISE
+                )
 
-    st.markdown(
-        "### Item Recommendation Summary"
-    )
+            elif (
+                discrimination_raw < 0.20
+                or
+                difficulty_raw < 0.20
+                or
+                difficulty_raw > 0.80
+            ):
 
-    recommendation_rows = []
+                recommendation = (
+                    ItemRecommendation.REVIEW
+                )
 
-    for item in items:
+            else:
 
-        recommendation = str(
-            get_value(
-                item,
-                "recommendation",
-                ""
+                recommendation = (
+                    ItemRecommendation.RETAIN
+                )
+
+            # ------------------------------------------------
+            # CREATE ITEM STATS
+            # ------------------------------------------------
+
+            item = ItemStats(
+
+                question=f"Question {question_number}",
+
+                question_number=question_number,
+
+                correct_answer=correct_answer,
+
+                correct_count=correct_count,
+
+                total_students=self.total_students,
+
+                difficulty=float(
+                    difficulty
+                ),
+
+                discrimination=float(
+                    discrimination
+                ),
+
+                recommendation=recommendation,
+
+                difficulty_status=difficulty_status,
+
+                discrimination_status=(
+                    discrimination_status
+                ),
+
+                distractor_efficiency=float(
+                    distractor_efficiency
+                ),
+
+                non_functional_distractors=(
+                    non_functional_distractors
+                ),
+
+                option_breakdown=(
+                    option_breakdown
+                ),
+
+                omitted_count=int(
+                    omitted_count
+                ),
+
+                omitted_percentage=float(
+                    omitted_percentage
+                )
             )
-        ).upper()
 
-        recommendation_rows.append({
+            item_stats.append(item)
 
-            "Question":
-                get_value(
-                    item,
-                    "question",
-                    ""
-                ),
+        return item_stats
 
-            "Difficulty":
-                f"{float(get_value(item, 'difficulty', 0)):.3f}",
+    # ========================================================
+    # RANK STUDENTS
+    # ========================================================
 
-            "Difficulty Status":
-                get_value(
-                    item,
-                    "difficulty_status",
-                    ""
-                ),
+    def rank_students(self):
 
-            "Discrimination":
-                f"{float(get_value(item, 'discrimination', 0)):.3f}",
+        if self.scores is None:
 
-            "Discrimination Status":
-                get_value(
-                    item,
-                    "discrimination_status",
-                    ""
-                ),
+            self.calculate_scores()
 
-            "Distractor Efficiency":
-                f"{float(get_value(item, 'distractor_efficiency', 0)):.0f}%",
+        ranked = self.student_data.copy()
 
-            "Recommendation":
-                recommendation
-        })
-
-    if recommendation_rows:
-
-        st.dataframe(
-            pd.DataFrame(
-                recommendation_rows
-            ),
-            use_container_width=True,
-            hide_index=True
+        ranked = ranked.sort_values(
+            by=["score", "name"],
+            ascending=[False, True]
         )
 
+        stats = []
 
-# ============================================================
-# UPLOAD REMINDER
-# ============================================================
+        previous_score = None
+        current_rank = 0
 
-else:
+        for position, (_, row) in enumerate(
+            ranked.iterrows(),
+            start=1
+        ):
 
-    st.info(
-        "💡 Please upload both the Answer Key and Student "
-        "Responses Excel files to unlock the analysis dashboard."
-    )
+            score = int(
+                row["score"]
+            )
+
+            if (
+                previous_score is None
+                or
+                score != previous_score
+            ):
+
+                current_rank = position
+
+            stats.append(
+                StudentStats(
+                    rank=current_rank,
+
+                    student_id=str(
+                        row["student_id"]
+                    ),
+
+                    name=str(
+                        row["name"]
+                    ),
+
+                    score=score,
+
+                    percentage=float(
+                        row["percentage"]
+                    ),
+
+                    responses=row[
+                        "responses"
+                    ],
+
+                    correct_count=score
+                )
+            )
+
+            previous_score = score
+
+        return stats
+
+    # ========================================================
+    # SUMMARY
+    # ========================================================
+
+    def get_summary(self):
+
+        if self.scores is None:
+
+            self.calculate_scores()
+
+        return {
+            "total_students": int(
+                self.total_students
+            ),
+
+            "total_questions": int(
+                self.total_questions
+            ),
+
+            "mean_score": round(
+                float(
+                    self.scores.mean()
+                ),
+                1
+            )
+            if len(self.scores) > 0
+            else 0.0,
+
+            "std_score": round(
+                float(
+                    self.scores.std()
+                ),
+                1
+            )
+            if len(self.scores) > 0
+            else 0.0,
+
+            "min_score": int(
+                self.scores.min()
+            )
+            if len(self.scores) > 0
+            else 0,
+
+            "max_score": int(
+                self.scores.max()
+            )
+            if len(self.scores) > 0
+            else 0,
+
+            "mean_percentage": round(
+                float(
+                    self.scores.mean()
+                    / self.total_questions
+                    * 100
+                ),
+                1
+            )
+            if (
+                len(self.scores) > 0
+                and
+                self.total_questions > 0
+            )
+            else 0.0
+        }
+
+    # ========================================================
+    # RUN COMPLETE ANALYSIS
+    # ========================================================
+
+    def run_analysis(
+        self,
+        answer_key_file,
+        student_data_file
+    ):
+
+        self.load_answer_key(
+            answer_key_file
+        )
+
+        self.load_student_responses(
+            student_data_file
+        )
+
+        self.calculate_scores()
+
+        items = (
+            self.calculate_item_statistics()
+        )
+
+        students = (
+            self.rank_students()
+        )
+
+        summary = (
+            self.get_summary()
+        )
+
+        return {
+            "summary": summary,
+            "items": items,
+            "students": students,
+            "exam_info": self.exam_info
+        }
