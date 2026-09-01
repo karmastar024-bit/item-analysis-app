@@ -1139,7 +1139,7 @@ class ItemAnalyzer:
             # ------------------------------------------------
             #
             # Status/recommendation logic below always uses the
-            # raw (unrounded) value, so rounding to 1 decimal for
+            # raw (unrounded) value, so rounding to 2 decimals for
             # display never shifts an item across a threshold.
 
             difficulty_raw = (
@@ -1557,7 +1557,7 @@ class ItemAnalyzer:
                     / self.total_questions
                     * 100
                 ),
-                1
+                2
             )
             if (
                 len(self.scores) > 0
