@@ -42,8 +42,8 @@ def load_template_bytes(path_str):
 # ============================================================
 
 st.set_page_config(
-    page_title="Item Analysis",
-    page_icon="",
+    page_title="Assessment Insight",
+    page_icon="📘",
     layout="wide",
     initial_sidebar_state="collapsed"
 )
@@ -344,6 +344,173 @@ div[data-testid="stHorizontalBlock"]:has(.metric-info-card)
     flex: 1 1 auto;
 }
 
+/* Application shell and educational dashboard polish */
+[data-testid="stAppViewContainer"] {
+    background:
+        radial-gradient(circle at 8% -8%, rgba(50, 118, 130, 0.10), transparent 29rem),
+        radial-gradient(circle at 98% 8%, rgba(218, 163, 73, 0.10), transparent 24rem),
+        #F7F8F5 !important;
+}
+
+[data-testid="stHeader"] {
+    background: rgba(247, 248, 245, 0.82);
+    backdrop-filter: blur(12px);
+}
+
+.block-container {
+    max-width: 1240px;
+    padding-top: 2.5rem;
+    padding-bottom: 4rem;
+}
+
+h1, h2, h3 {
+    color: #173B3F !important;
+    letter-spacing: -0.03em;
+}
+
+.header-box {
+    position: relative;
+    overflow: hidden;
+    background: linear-gradient(120deg, #173B3F, #1A5353);
+    border: 1px solid rgba(255,255,255,0.13);
+    border-radius: 22px;
+    padding: 42px 46px;
+    box-shadow: 0 18px 42px rgba(20, 54, 57, 0.18);
+    margin-bottom: 30px;
+}
+
+.header-box::after {
+    content: "";
+    position: absolute;
+    width: 340px;
+    height: 340px;
+    border: 1px solid rgba(248, 209, 130, 0.35);
+    border-radius: 50%;
+    right: -110px;
+    top: -155px;
+    box-shadow: 0 0 0 42px rgba(248, 209, 130, 0.06),
+                0 0 0 84px rgba(248, 209, 130, 0.04);
+}
+
+.header-content { position: relative; z-index: 1; max-width: 720px; }
+
+.eyebrow {
+    color: #F8D182;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 10px;
+    font-weight: 600;
+    letter-spacing: 0.13em;
+    text-transform: uppercase;
+}
+
+.hero-title {
+    color: #FFFFFF !important;
+    font-size: clamp(2rem, 4vw, 3.05rem);
+    line-height: 1.08;
+    margin: 12px 0 13px;
+}
+
+.hero-copy { color: #D7E7E2; font-size: 15px; line-height: 1.7; margin: 0; }
+
+.section-intro { margin: 34px 0 16px; }
+.section-kicker {
+    color: #A4641A;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 10px;
+    font-weight: 600;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    margin-bottom: 5px;
+}
+.section-title {
+    color: #173B3F;
+    font-family: 'Space Grotesk', sans-serif;
+    font-size: 1.55rem;
+    font-weight: 700;
+    letter-spacing: -0.025em;
+    margin: 0;
+}
+.section-copy { color: #617477; font-size: 13.5px; line-height: 1.55; margin: 5px 0 0; }
+
+.workflow-steps {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 10px;
+    margin: 18px 0 16px;
+}
+.workflow-step {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 12px 14px;
+    background: #FFFFFF;
+    border: 1px solid #DCE7E2;
+    border-radius: 12px;
+    color: #52666A;
+    font-size: 12.5px;
+}
+.workflow-step span {
+    display: grid;
+    place-items: center;
+    width: 23px;
+    height: 23px;
+    border-radius: 50%;
+    background: #E5F1EC;
+    color: #176B5A;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11px;
+    font-weight: 700;
+}
+.upload-panel-title {
+    color: #173B3F;
+    font-family: 'Space Grotesk', sans-serif;
+    font-weight: 700;
+    font-size: 15px;
+    margin-bottom: 7px;
+}
+
+[data-testid="stButton"] > button,
+[data-testid="stDownloadButton"] > button {
+    min-height: 2.75rem;
+    border-radius: 10px;
+    font-weight: 600;
+    transition: transform 0.15s ease, box-shadow 0.15s ease;
+}
+[data-testid="stButton"] > button[kind="primary"],
+[data-testid="stDownloadButton"] > button[kind="primary"] {
+    background: #176B5A;
+    border-color: #176B5A;
+}
+[data-testid="stButton"] > button:hover,
+[data-testid="stDownloadButton"] > button:hover {
+    transform: translateY(-1px);
+    box-shadow: 0 7px 14px rgba(23, 107, 90, 0.16);
+}
+[data-testid="stMetric"] {
+    background: #FFFFFF;
+    border: 1px solid #DCE7E2;
+    border-radius: 14px;
+    padding: 16px 18px;
+    box-shadow: 0 2px 8px rgba(23, 59, 63, 0.035);
+}
+[data-testid="stMetricLabel"] { color: #617477; font-size: 12px; font-weight: 600; }
+[data-testid="stMetricValue"] { color: #173B3F; font-family: 'Space Grotesk', sans-serif; }
+[data-testid="stExpander"] {
+    background: #FFFFFF;
+    border: 1px solid #DCE7E2;
+    border-radius: 13px;
+    overflow: hidden;
+    margin-bottom: 9px;
+}
+[data-testid="stExpander"] summary { padding: 5px 4px; font-weight: 650; color: #173B3F; }
+[data-testid="stDataFrame"] { border: 1px solid #DCE7E2; border-radius: 12px; overflow: hidden; }
+
+@media (max-width: 700px) {
+    .block-container { padding-top: 1.2rem; }
+    .header-box { padding: 30px 25px; border-radius: 17px; }
+    .workflow-steps { grid-template-columns: 1fr; }
+}
+
 </style>
 """,
     unsafe_allow_html=True
@@ -357,34 +524,15 @@ div[data-testid="stHorizontalBlock"]:has(.metric-info-card)
 st.html(
     """
 <div class="header-box">
-
-    <div style="
-        font-family: monospace;
-        font-size: 11px;
-        letter-spacing: 0.1em;
-        color: #AFC3DC;
-        text-transform: uppercase;
-    ">
-        ITEM ANALYZER
+    <div class="header-content">
+        <div class="eyebrow">Assessment insight studio</div>
+        <h1 class="hero-title">Make every question a better teaching decision.</h1>
+        <p class="hero-copy">
+            Upload an answer key and student responses to turn classroom
+            results into practical evidence: which items to retain, review,
+            revise, or remove.
+        </p>
     </div>
-
-    <h1 style="
-        color: white;
-        margin: 5px 0;
-    ">
-        Diagnose your assessment, question by question
-    </h1>
-
-    <p style="
-        color: #C5D2E6;
-        font-size: 14px;
-        margin-bottom: 0;
-    ">
-        Upload an answer key and student responses to calculate
-        difficulty, discrimination, and distractor readouts
-        for every item.
-    </p>
-
 </div>
 """
 )
@@ -400,15 +548,14 @@ st.html(
 # These formulas mirror item_analyzer.py exactly.
 
 st.markdown(
-    "### 📊 How These Metrics Are Calculated"
-)
-
-st.markdown(
-    '<p style="font-family:\'Inter\',sans-serif; font-size:13.5px; '
-    'color:#65728A; margin-top:-6px; margin-bottom:18px;">'
-    "These formulas are applied automatically to every question "
-    "once you upload your files below."
-    "</p>",
+    """
+<div class="section-intro">
+    <div class="section-kicker">Before you begin</div>
+    <div class="section-title">Understand the evidence behind each item</div>
+    <p class="section-copy">Three measures help you distinguish questions
+    that are working well from those that need attention.</p>
+</div>
+""",
     unsafe_allow_html=True
 )
 
@@ -1164,7 +1311,20 @@ def create_excel_report(results):
 # in the popup every time.
 
 st.markdown(
-    "### 📥 Load Test Data"
+    """
+<div class="section-intro">
+    <div class="section-kicker">Analysis workflow</div>
+    <div class="section-title">Prepare your assessment files</div>
+    <p class="section-copy">Use the supplied templates so every response is
+    read accurately and your results remain comparable.</p>
+</div>
+<div class="workflow-steps">
+    <div class="workflow-step"><span>1</span>Download the templates</div>
+    <div class="workflow-step"><span>2</span>Upload both completed files</div>
+    <div class="workflow-step"><span>3</span>Review and export insights</div>
+</div>
+""",
+    unsafe_allow_html=True
 )
 
 
@@ -1371,6 +1531,11 @@ col_key, col_data = st.columns(2)
 
 with col_key:
 
+    st.markdown(
+        '<div class="upload-panel-title">1. Answer key</div>',
+        unsafe_allow_html=True
+    )
+
     key_file = render_upload_slot(
         prefix="key",
         label="Answer Key",
@@ -1378,6 +1543,11 @@ with col_key:
     )
 
 with col_data:
+
+    st.markdown(
+        '<div class="upload-panel-title">2. Student responses</div>',
+        unsafe_allow_html=True
+    )
 
     data_file = render_upload_slot(
         prefix="data",
@@ -1521,7 +1691,15 @@ if (
     )
 
     st.markdown(
-        "### Overall Summary"
+        """
+<div class="section-intro">
+    <div class="section-kicker">Assessment overview</div>
+    <div class="section-title">Your cohort at a glance</div>
+    <p class="section-copy">Start here for a quick picture of participation,
+    score spread, and overall performance.</p>
+</div>
+""",
+        unsafe_allow_html=True
     )
 
     metric_col1, metric_col2, metric_col3 = st.columns(3)
@@ -1609,7 +1787,13 @@ if (
     st.markdown("---")
 
     st.markdown(
-        "### 📥 Download Analysis Report"
+        """
+<div class="section-intro">
+    <div class="section-kicker">Shareable record</div>
+    <div class="section-title">Download the complete report</div>
+</div>
+""",
+        unsafe_allow_html=True
     )
 
     report_bytes = create_excel_report(
@@ -1641,7 +1825,13 @@ if (
     st.markdown("---")
 
     st.markdown(
-        "### 🔬 Item-Wise Analysis"
+        """
+<div class="section-intro">
+    <div class="section-kicker">Question review</div>
+    <div class="section-title">Item-by-item analysis</div>
+</div>
+""",
+        unsafe_allow_html=True
     )
 
     st.caption(
@@ -2258,7 +2448,13 @@ if (
     st.markdown("---")
 
     st.markdown(
-        "### Item Recommendation Summary"
+        """
+<div class="section-intro">
+    <div class="section-kicker">Teaching actions</div>
+    <div class="section-title">Item recommendation summary</div>
+</div>
+""",
+        unsafe_allow_html=True
     )
 
     recommendation_rows = []
