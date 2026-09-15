@@ -28,7 +28,8 @@ from item_analyzer import ItemAnalyzer
 # so what the user downloads always matches what the analyzer's
 # header-detection logic expects.
 
-TEMPLATES_DIR = Path(__file__).parent / "templates"
+APP_DIR = Path(__file__).resolve().parent
+TEMPLATES_DIR = APP_DIR / "templates"
 ANSWER_KEY_TEMPLATE_PATH = TEMPLATES_DIR / "answer_key_template.xlsx"
 STUDENT_TEMPLATE_PATH = TEMPLATES_DIR / "student_response_template.xlsx"
 
@@ -553,6 +554,24 @@ h1, h2, h3 {
 }
 .formula-fraction > span:last-child { padding: 4px 5px 0; }
 .formula-operator { font-size: 18px; line-height: 1; }
+.decision-guide {
+    margin: 24px 0 10px;
+    padding: 22px;
+    background: #FFFFFF;
+    border: 1px solid #DCE7E2;
+    border-radius: 14px;
+    box-shadow: 0 2px 10px rgba(22, 35, 62, 0.04);
+}
+.decision-guide-title { color: #173B3F; font-family: 'Space Grotesk', sans-serif; font-size: 18px; font-weight: 700; margin: 0 0 6px; }
+.decision-guide-copy { color: #52666A; font-size: 13px; line-height: 1.55; margin: 0 0 16px; }
+.decision-rules { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; }
+.decision-rule { border-radius: 10px; padding: 13px; border: 1px solid #E4E9F2; }
+.decision-rule strong { display: block; font-size: 12px; letter-spacing: .04em; margin-bottom: 6px; }
+.decision-rule span { color: #4B5875; font-size: 12px; line-height: 1.45; }
+.decision-discard { background: #FEF3F2; border-color: #FECACA; }.decision-discard strong { color: #B42318; }
+.decision-revise { background: #FFF7ED; border-color: #FED7AA; }.decision-revise strong { color: #B54708; }
+.decision-review { background: #FFFAEB; border-color: #FDE68A; }.decision-review strong { color: #9A6700; }
+.decision-retain { background: #ECFDF3; border-color: #ABEFC6; }.decision-retain strong { color: #027A48; }
 .download-callout {
     background: linear-gradient(115deg, #E7F3EE, #F9FCF9);
     border: 1px solid #C6E0D4;
@@ -575,6 +594,7 @@ h1, h2, h3 {
     .header-box { padding: 30px 25px; border-radius: 17px; }
     .workflow-steps { grid-template-columns: 1fr; }
     .metric-card-grid { grid-template-columns: 1fr; }
+    .decision-rules { grid-template-columns: 1fr; }
     .metric-card-grid .metric-info-card { min-height: 0; }
 }
 
@@ -675,6 +695,22 @@ st.markdown(
 </div>
 """,
     unsafe_allow_html=True
+)
+
+st.markdown(
+    """
+<section class="decision-guide" aria-label="Item recommendation rules">
+  <h2 class="decision-guide-title">How the item recommendation is decided</h2>
+  <p class="decision-guide-copy">The app evaluates the unrounded difficulty and discrimination values in this order. Distractor efficiency is reported separately and does not change the final recommendation.</p>
+  <div class="decision-rules">
+    <div class="decision-rule decision-discard"><strong>DISCARD</strong><span>Discrimination is below <code>0</code>.</span></div>
+    <div class="decision-rule decision-revise"><strong>REVISE</strong><span>Discrimination is below <code>0.20</code> <em>and</em> difficulty is below <code>0.20</code> or above <code>0.80</code>.</span></div>
+    <div class="decision-rule decision-review"><strong>REVIEW</strong><span>Discrimination is below <code>0.20</code>, or difficulty is below <code>0.20</code> or above <code>0.80</code>.</span></div>
+    <div class="decision-rule decision-retain"><strong>RETAIN</strong><span>All remaining items: discrimination is at least <code>0.20</code> and difficulty is from <code>0.20</code> through <code>0.80</code>, inclusive.</span></div>
+  </div>
+</section>
+""",
+    unsafe_allow_html=True,
 )
 
 st.markdown("")
