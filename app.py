@@ -6,6 +6,7 @@ from enum import Enum
 from io import BytesIO
 from pathlib import Path
 
+import altair as alt
 import pandas as pd
 import streamlit as st
 from openpyxl.styles import (
@@ -18,6 +19,7 @@ from openpyxl.styles import (
 from openpyxl.utils import get_column_letter
 
 from item_analyzer import ItemAnalyzer
+from report_extras import compute_score_distribution, create_pdf_report
 
 
 # ============================================================
@@ -2097,6 +2099,68 @@ if (
         )
 
     # ========================================================
+    # SCORE DISTRIBUTION
+    # ========================================================
+
+    st.markdown("---")
+
+    st.markdown(
+        """
+<div class="section-intro">
+    <div class="section-kicker">Score spread</div>
+    <div class="section-title">Score distribution</div>
+    <p class="section-copy">How many students reached each score. Use it
+    to see whether the test was too easy, too hard, or well balanced.</p>
+</div>
+""",
+        unsafe_allow_html=True
+    )
+
+    distribution = compute_score_distribution(results)
+
+    distribution_df = pd.DataFrame(
+        distribution["bins"],
+        columns=["Score", "Students"]
+    )
+
+    if distribution_df["Students"].sum() > 0:
+
+        distribution_chart = (
+            alt.Chart(distribution_df)
+            .mark_bar(color="#3B6EA8")
+            .encode(
+                x=alt.X(
+                    "Score:N",
+                    sort=None,
+                    title="Score (number of correct answers)",
+                    axis=alt.Axis(labelAngle=0)
+                ),
+                y=alt.Y(
+                    "Students:Q",
+                    title="Number of students",
+                    axis=alt.Axis(tickMinStep=1)
+                ),
+                tooltip=["Score", "Students"]
+            )
+            .properties(height=320)
+        )
+
+        st.altair_chart(
+            distribution_chart,
+            use_container_width=True
+        )
+
+        st.caption(
+            f"Mean: {distribution['mean']:.2f}  |  "
+            f"Median: {distribution['median']:.1f}  |  "
+            f"Out of {distribution['total_questions']} questions"
+        )
+
+    else:
+
+        st.info("No student scores available to chart.")
+
+    # ========================================================
     # ITEM ANALYSIS
     # ========================================================
 
@@ -2818,22 +2882,37 @@ if (
         results
     )
 
-    st.download_button(
-        label="⬇️ Download Complete Item Analysis Report",
-        data=report_bytes,
-        file_name="Item_Analysis_Report.xlsx",
-        mime=(
-            "application/vnd.openxmlformats-officedocument."
-            "spreadsheetml.sheet"
-        ),
-        type="primary",
-        use_container_width=True
-    )
+    excel_col, pdf_col = st.columns(2)
+
+    with excel_col:
+
+        st.download_button(
+            label="⬇️ Download Excel Report",
+            data=report_bytes,
+            file_name="Item_Analysis_Report.xlsx",
+            mime=(
+                "application/vnd.openxmlformats-officedocument."
+                "spreadsheetml.sheet"
+            ),
+            type="primary",
+            use_container_width=True
+        )
+
+    with pdf_col:
+
+        st.download_button(
+            label="⬇️ Download PDF Report",
+            data=create_pdf_report(results),
+            file_name="Item_Analysis_Report.pdf",
+            mime="application/pdf",
+            type="primary",
+            use_container_width=True
+        )
 
     st.caption(
-        "The report contains Item Analysis first, followed by "
-        "Option Breakdown and Overall Summary, each stamped with "
-        "your exam information."
+        "The Excel report contains Item Analysis, Option Breakdown "
+        "and Overall Summary sheets. The PDF report adds the score "
+        "distribution chart and is ready to print or share."
     )
 
 
