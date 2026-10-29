@@ -1,0 +1,42 @@
+StudentID,Q1,Q2,Q3,Q4,Q5,Q6
+KEY,Thimphu,Paro Taktsang|Tiger's Nest|Taktsang,Punakha|Punakha Dzong,Druk,Ngultrum|BTN,Wangchuck
+S001,thimphu,Paro, Punakha ,Druk,btn,Wangdi
+S002,Punakha,,Trongsa,Druk,Dollar,Wangchuck
+S003,,Thimpu,Trongsa,Dragon,Dollar,Namgyal
+S004,Paro,Tiger's Nest, Punakha Dzong ,druk,Dollar,Wangchuck
+S005,Paro,paro taktsang,Trongsa,druk,Dollar,Wangdi
+S006, Thimphu ,Paro Taktsang,,Dzong,Dollar,Wangchuck
+S007,Thimphu, Tiger's Nest ,Wangdue,Druk,Dollar,WANGCHUCK
+S008,Paro,Tiger's Nest,PUNAKHA,,,WANGCHUCK
+S009,Paro,Paro,Wangdue,druk,Dollar,Namgyal
+S010,Thimphu,Thimpu,Wangdue,Dragon,,Wangdi
+S011,thimphu,Paro,Trongsa,DRUK,Dollar,wangchuck
+S012,Paro,taktsang,Wangdue,DRUK,Dollar,wangchuck
+S013,Bumthang, Paro Taktsang ,punakha dzong,DRUK,Ngultrum,WANGCHUCK
+S014,Paro,,Trongsa,Dzong,Rupee,
+S015, Thimphu ,tiger's nest,Wangdue,druk,Rupee,wangchuck
+S016,THIMPHU,,Punakha, Druk ,Dollar,Namgyal
+S017,Bumthang,,Wangdue,Dzong,, Wangchuck 
+S018,Thimphu, Paro Taktsang , Punakha Dzong ,Dragon,Dollar,wangchuck
+S019,THIMPHU,Taktsang,Trongsa,Dzong,Rupee,Wangchuck
+S020,Punakha,Thimpu,Trongsa,Druk,Rupee,Namgyal
+S021,thimphu,Paro,Wangdue,Dragon,Rupee, Wangchuck 
+S022, Thimphu ,Paro,Punakha Dzong,Druk,Rupee,Wangchuck
+S023,Thimphu,Paro,Trongsa,Dzong,Rupee,Wangchuck
+S024,thimphu,TIGER'S NEST,Trongsa,Dzong,Dollar,Wangdi
+S025,Bumthang, Taktsang , Punakha ,Dzong,Rupee,Wangchuck
+S026, Thimphu ,Paro, Punakha Dzong ,Dzong, Ngultrum ,Wangchuck
+S027,Paro,Paro,Wangdue,,Dollar,Namgyal
+S028, Thimphu ,tiger's nest, Punakha ,DRUK,Rupee,Wangchuck
+S029,Paro,Thimpu,Wangdue,Dragon,Dollar,Namgyal
+S030,Bumthang,Thimpu,Trongsa,druk,NGULTRUM,Wangdi
+S031,Paro,Paro,Trongsa,,Dollar,Wangdi
+S032, Thimphu ,Taktsang,, Druk ,BTN,Wangchuck
+S033,THIMPHU, Paro Taktsang ,PUNAKHA,Dragon,Rupee,Wangchuck
+S034,Thimphu, Paro Taktsang , Punakha Dzong ,Dzong,,Wangdi
+S035, Thimphu ,PARO TAKTSANG, Punakha ,DRUK,Ngultrum,WANGCHUCK
+S036, Thimphu ,Paro,Trongsa,Druk,Dollar,Wangchuck
+S037, Thimphu ,Thimpu,,Dragon,Rupee,Wangchuck
+S038,Bumthang,Paro,punakha dzong,Dzong,,
+S039,Bumthang,Tiger's Nest, Punakha Dzong ,Dragon,Dollar,
+S040, Thimphu ,paro taktsang,Wangdue,druk,Rupee,wangchuck
