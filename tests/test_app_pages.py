@@ -22,8 +22,9 @@ def test_page_loads(mod, fn):
 def test_entry_point_and_navigation():
     at = AppTest.from_file(str(ROOT / "app.py"), default_timeout=90).run()
     assert not at.exception, at.exception
-    assert [b.label for b in at.button][:5] == ["📝\n\nMCQ","✔️\n\nTrue or False","✏️\n\nFill in the Blanks",
-                                                 "🔗\n\nMatching","📄\n\nLong / Essay"]
+    assert [b.label for b in at.button][:5] == ["Analyze MCQ →", "Analyze True or False →",
+                                              "Analyze Fill in the Blanks →", "Analyze Matching →",
+                                              "Analyze Long / Essay →"]
     assert "ITEM ANALYZER" in " ".join(m.value for m in at.markdown)
 
 def test_legacy_mcq_page_loads():
