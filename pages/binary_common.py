@@ -50,7 +50,6 @@ def render(kind):
                "Name and Total Score are optional; analysis uses item responses.")
     if sample.exists():
         c2.download_button("⬇️ Excel template", sample.read_bytes(), sample.name, width="stretch")
-    st.caption(t("privacy"))
 
     up = st.file_uploader("Upload .csv or .xlsx", type=["csv", "xlsx"], key=f"up_{kind}")
     if up is None:

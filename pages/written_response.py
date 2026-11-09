@@ -32,7 +32,6 @@ def render():
                "Name and Total Score are optional; analysis uses awarded item scores.")
     if SAMPLE.exists():
         c2.download_button("⬇️ Excel template", SAMPLE.read_bytes(), SAMPLE.name, width="stretch")
-    st.caption(t("privacy"))
     up = st.file_uploader("Upload .csv or .xlsx", type=["csv", "xlsx"], key="up_written")
     if up is None:
         st.info("Upload a file to begin."); return
