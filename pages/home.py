@@ -32,10 +32,11 @@ HOME_CSS = """
 .ia-home-hint {font-size: 16px; opacity: .75; margin: 0 0 24px;}
 [class*="st-key-analysis_card_"] {
     --accent: #2459bc; --soft: #edf3ff; --ink: #162b50;
-    background: linear-gradient(140deg, #fff 30%, var(--soft) 100%);
+    background: linear-gradient(140deg, #ffffffd9 0%, color-mix(in srgb, var(--soft) 78%, transparent) 100%);
+    backdrop-filter: blur(20px); -webkit-backdrop-filter: blur(20px);
     border: 1px solid #dfe6ef; border-top: 5px solid var(--accent);
     border-radius: 22px; padding: 24px !important; margin-bottom: 20px;
-    box-shadow: 0 6px 20px #12234208;
+    box-shadow: inset 0 1px 0 #ffffffd9, 0 12px 32px #12234212;
     transition: transform .18s ease, box-shadow .18s ease;
 }
 [class*="st-key-analysis_card_"]:hover {transform: translateY(-4px); box-shadow: 0 16px 30px #12234216;}
@@ -46,15 +47,18 @@ HOME_CSS = """
 .st-key-analysis_card_statistics {--accent: #426279; --soft: #edf4f8;}
 .ia-select-top {display: flex; align-items: center; justify-content: space-between; gap: 12px;}
 .ia-select-icon {display: grid; place-items: center; width: 58px; height: 58px;
-    background: var(--soft); border-radius: 17px; font-size: 29px;}
+    background: linear-gradient(135deg, #ffffffc9, var(--soft));
+    border: 1px solid #ffffffc9; box-shadow: inset 0 1px 0 #fff, 0 6px 16px #12234212;
+    flex-shrink: 0; border-radius: 17px; font-size: 29px;}
 .ia-select-tag {font-size: 11px; font-weight: 800; letter-spacing: .08em;
     text-transform: uppercase; color: var(--accent);}
+.ia-select-card {display: grid; grid-template-rows: 58px 88px 128px;}
 .ia-select-card h3 {font-size: 28px; font-weight: 800; letter-spacing: -.035em;
     color: var(--ink); margin: 20px 0 10px; padding: 0; line-height: 1.2;}
 .ia-select-card p {font-size: 16px; line-height: 1.6; color: #526178;
     min-height: 78px; margin: 0 0 10px;}
 [class*="st-key-analysis_card_"] div[data-testid="stButton"] > button {
-    min-height: 52px; border-radius: 12px; background: var(--accent); border: 2px solid var(--accent);
+    min-height: 76px; border-radius: 12px; background: var(--accent); border: 2px solid var(--accent);
     color: white; box-shadow: none;
 }
 [class*="st-key-analysis_card_"] div[data-testid="stButton"] > button p {font-size: 17px; font-weight: 750;}
@@ -64,10 +68,17 @@ HOME_CSS = """
 [class*="st-key-analysis_card_"] div[data-testid="stButton"] > button:focus-visible {
     outline: 3px solid var(--accent); outline-offset: 4px;
 }
+@media (max-width: 900px) {
+    [data-testid="stHorizontalBlock"]:has([class*="st-key-analysis_card_"]) {flex-wrap: wrap;}
+    [data-testid="stHorizontalBlock"]:has([class*="st-key-analysis_card_"]) > [data-testid="stColumn"] {
+        width: 100% !important; flex: 1 1 100% !important;
+    }
+}
 @media (max-width: 700px) {
     .ia-home-hero {padding: 32px 24px; border-radius: 22px;}
     .ia-home-hero p {font-size: 17px;}
     .ia-home-heading {font-size: 25px;}
+    .ia-select-card {grid-template-rows: 58px 88px 128px;}
     .ia-select-card p {min-height: 0;}
     [class*="st-key-analysis_card_"] {padding: 22px !important;}
 }
@@ -107,7 +118,7 @@ def render():
 </section>
 ''', unsafe_allow_html=True)
     st.markdown(f'<h2 class="ia-home-heading">{escape(t("sec_choose"))}</h2>'
-                '<p class="ia-home-hint">Pick a card to get started. Your Excel template is waiting inside.</p>',
+                '<p class="ia-home-hint">Choose a test item.</p>',
                 unsafe_allow_html=True)
     for start in (0, 3):
         for col, (key, icon, tag, target, description) in zip(st.columns(3), CHOICES[start:start + 3]):
@@ -120,4 +131,3 @@ def render():
                 label = "Explore scores →" if key == "statistics" else f"Analyze {title} →"
                 if st.button(label, key=f"choose_{key}", width="stretch"):
                     go(target)
-    st.caption(t("privacy"))
