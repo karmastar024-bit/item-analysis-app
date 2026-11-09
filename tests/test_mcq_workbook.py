@@ -144,7 +144,7 @@ def _upload_page(raw):
 def test_single_upload_and_stale_results():
     from streamlit.testing.v1 import AppTest
     at = AppTest.from_function(_upload_page, args=(completed_template(),)).run()
-    next(b for b in at.button if b.label == "Run Analysis").click().run()
+    next(b for b in at.button if b.label == "▶ Run analysis").click().run()
     assert not at.exception
     assert at.session_state["analysis_results"]["summary"]["total_students"] == 4
     at.session_state["test_raw"] = completed_template({"C10": 80})
