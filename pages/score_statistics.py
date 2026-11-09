@@ -1,4 +1,6 @@
 """Test Distribution: descriptive statistics, plots, t-tests, z-tests."""
+from pathlib import Path
+
 import numpy as np
 import pandas as pd
 import streamlit as st
@@ -7,14 +9,16 @@ from components import charts, explanations as ex
 from utils.file_handlers import read_upload, df_to_csv_bytes
 from utils.translations import t
 
-TESTS = ["One-sample t-test", "Independent-samples t-test", "Paired-samples t-test",
-         "One-sample z-test", "Two-sample z-test"]
-
+TESTS = ["t-test", "z-test"]
 
 def _parse(text):
     vals, bad = [], []
     for tok in text.replace(",", " ").replace(";", " ").split():
-        try: vals.append(float(tok))
+        try:
+            value = float(tok)
+            if not np.isfinite(value):
+                raise ValueError
+            vals.append(value)
         except ValueError: bad.append(tok)
     return vals, bad
 
@@ -36,9 +40,17 @@ def score_input(label, key, allow_session=True):
         try: df = read_upload(up)
         except ValueError as e: st.error(f"❌ {e}"); return None
         num = df.apply(pd.to_numeric, errors="coerce")
-        cols = [c for c in num.columns if num[c].notna().sum() >= 2]
+        cols = [c for c in num.columns if num[c].notna().any()
+                and str(c).strip().casefold().replace("_", " ") not in
+                {"student id", "studentid", "id", "student name", "name"}]
+        preferred = next((c for c in cols if str(c).strip().casefold().replace("_", " ")
+                          in {"total scores", "total score", "score", "scores"}), None)
+        if preferred is not None:
+            cols.remove(preferred)
+            cols.insert(0, preferred)
         if not cols: st.error("❌ No numeric column found in the file."); return None
         col = st.selectbox("Column containing the scores", cols, key=f"col_{key}")
+        num[col] = num[col].replace([np.inf, -np.inf], np.nan)
         miss = int(num[col].isna().sum())
         if miss: st.warning(f"⚠️ {miss} non-numeric/empty value(s) in this column were ignored.")
         return num[col].dropna().tolist()
@@ -77,67 +89,71 @@ def _show(res):
 
 
 def render():
-    st.header("Test distribution & statistical tests")
-    st.caption(t("privacy"))
-    tab_d, tab_t = st.tabs(["📈 Descriptive statistics & distribution", "🧪 Statistical tests"])
+    st.header("Test Distribution")
+    st.caption("Explore total scores and compare your class mean with a reference value.")
+    template = Path(__file__).resolve().parent.parent / "templates" / "score_statistics_template.xlsx"
+    left, right = st.columns([3, 1.4])
+    left.caption("File layout: Student ID, Student Name, Total Scores. "
+                 "Student Name is optional and is not used in the analysis. "
+                 "Replace the example rows with your class scores.")
+    if template.exists():
+        right.download_button("⬇️ Excel template", template.read_bytes(), template.name,
+                              "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                              width="stretch")
+    vals = score_input("Total test scores", "desc")
+    if vals is None:
+        st.info("Upload a file or enter scores to see the distribution and descriptive statistics.")
+        return
+    try:
+        d = T.descriptive(vals)
+    except ValueError as e:
+        st.error(f"❌ {e}")
+        return
+    st.subheader("Descriptive statistics")
+    for col, (label, key) in zip(st.columns(4), [
+        ("Students", "N"), ("Mean", "Mean"), ("Median", "Median"),
+        ("Standard deviation", "Std. deviation (sample)")]):
+        value = d[key]
+        col.metric(label, str(value) if key == "N" else
+                   (f"{value:.2f}" if np.isfinite(value) else "—"))
+    if d["N"] < 10:
+        st.caption("With fewer than 10 scores, interpret the distribution shape cautiously.")
+    a, b = st.columns([3, 1.4])
+    a.altair_chart(charts.score_hist(vals), width="stretch")
+    b.altair_chart(charts.boxplot(vals), width="stretch")
+    st.caption("The box contains the middle 50% of scores; its line marks the median. "
+               "Dots beyond the whiskers are possible outliers.")
+    summary = pd.DataFrame({"Statistic": list(d), "Value": [
+        (f"{v:.3f}" if np.isfinite(v) else "—") if isinstance(v, float) else str(v)
+        for v in d.values()]})
+    with st.expander("All descriptive statistics"):
+        st.dataframe(summary, hide_index=True, width="stretch")
+        st.download_button("⬇️ Download statistics (CSV)", df_to_csv_bytes(summary),
+                           "descriptive_statistics.csv", "text/csv")
 
-    with tab_d:
-        vals = score_input("Total test scores", "desc")
-        if vals is None:
-            st.info("Provide scores to see the distribution."); 
-        else:
-            try:
-                d = T.descriptive(vals)
-                st.dataframe(pd.DataFrame({"Statistic": list(d), "Value": [f"{x:.3f}" if isinstance(x, float) else x
-                                                                            for x in d.values()]}),
-                             hide_index=True, width="stretch")
-                if d["N"] < 10: st.warning("⚠️ Very few scores: shape and spread are unreliable.")
-                a, b = st.columns([3, 1.4])
-                a.altair_chart(charts.score_hist(vals), width="stretch")
-                b.altair_chart(charts.boxplot(vals), width="stretch")
-                st.caption("The box shows the middle 50% of scores, the line is the median; dots beyond the "
-                           "whiskers are possible outliers.")
-            except ValueError as e:
-                st.error(f"❌ {e}")
-
-    with tab_t:
-        test = st.selectbox("Which test?", TESTS, key="which_test")
-        alpha = st.number_input("Significance level α", 0.001, 0.20, 0.05, 0.005, format="%.3f", key="alpha")
-        with st.expander("When is this test appropriate?"):
-            fam = {"One-sample t-test": "One-sample t-test", "Independent-samples t-test": "Independent-samples t-test (Welch / pooled)"}.get(test, test)
-            ltx, txt = ex.TESTS[fam]; st.latex(ltx); st.write(txt)
-        if test.endswith("z-test"):
-            st.warning("🔔 A z-test is **not** just a 'bigger-sample t-test'. It requires known population "
-                       "standard deviation(s). If you only know your own class's SD, choose a t-test.")
-        alt = _alt()
+    st.subheader("Compare with a reference mean")
+    test = st.radio("Choose a test", TESTS, key="which_test", horizontal=True)
+    st.caption("One-sample test: compare the mean of the scores above with a hypothesised mean.")
+    c = st.columns(2)
+    mu = c[0].number_input("Hypothesised mean (μ₀)", value=50.0, key="reference_mean")
+    alpha = c[1].number_input("Significance level α", 0.001, 0.20, 0.05, 0.005,
+                              format="%.3f", key="alpha")
+    sigma = None
+    if test == "z-test":
+        st.warning("A z-test requires a known population standard deviation. "
+                   "If you only know your class's SD, choose a t-test.")
+        sigma = st.number_input("KNOWN population SD (σ)", min_value=0.0,
+                                value=10.0, key="population_sd")
+    alt = _alt()
+    with st.expander("When is this test appropriate?"):
+        ltx, txt = ex.TESTS[f"One-sample {test}"]
+        st.latex(ltx)
+        st.write(txt)
+        st.write(ex.ASSUMPTIONS)
+    if st.button("Run test", type="primary"):
         try:
-            if test == "One-sample t-test":
-                x = score_input("Scores", "t1"); mu = st.number_input("Hypothesised mean (μ₀)", value=50.0)
-                if x and st.button("Run test", type="primary"): _show(T.one_sample_t(x, mu, alpha, alt))
-            elif test == "Independent-samples t-test":
-                st.markdown("**Group 1**"); a = score_input("Group 1 scores", "g1")
-                st.markdown("**Group 2**"); b = score_input("Group 2 scores", "g2", allow_session=False)
-                eq = st.checkbox("Assume equal variances (pooled)", False,
-                                 help="Leave unticked unless you have a reason. Welch's test is safe either way.")
-                if a and b and st.button("Run test", type="primary"): _show(T.independent_t(a, b, alpha, alt, eq))
-            elif test == "Paired-samples t-test":
-                st.markdown("**First measurement (e.g. pre-test)**"); a = score_input("First scores", "p1")
-                st.markdown("**Second measurement (e.g. post-test)** – same students, same order")
-                b = score_input("Second scores", "p2", allow_session=False)
-                if a and b:
-                    if len(a) != len(b): st.error(f"❌ Paired scores must have the same length ({len(a)} vs {len(b)}).")
-                    elif st.button("Run test", type="primary"): _show(T.paired_t(a, b, alpha, alt))
-            elif test == "One-sample z-test":
-                x = score_input("Scores", "z1"); c = st.columns(2)
-                mu = c[0].number_input("Hypothesised mean (μ₀)", value=50.0)
-                sg = c[1].number_input("KNOWN population SD (σ)", min_value=0.0, value=10.0)
-                if x and st.button("Run test", type="primary"): _show(T.one_sample_z(x, mu, sg, alpha, alt))
-            else:
-                a = score_input("Group 1 scores", "zg1"); b = score_input("Group 2 scores", "zg2", allow_session=False)
-                c = st.columns(2)
-                s1 = c[0].number_input("KNOWN σ for group 1", min_value=0.0, value=10.0)
-                s2 = c[1].number_input("KNOWN σ for group 2", min_value=0.0, value=10.0)
-                if a and b and st.button("Run test", type="primary"): _show(T.two_sample_z(a, b, s1, s2, alpha, alt))
+            result = (T.one_sample_t(vals, mu, alpha, alt) if test == "t-test" else
+                      T.one_sample_z(vals, mu, sigma, alpha, alt))
+            _show(result)
         except ValueError as e:
             st.error(f"❌ {e}")
-        st.info(ex.ASSUMPTIONS)
