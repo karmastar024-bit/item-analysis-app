@@ -17,7 +17,6 @@ def about():
     st.markdown("**Item types:** Selected-response (MCQ, True/False, Matching) · Short constructed-response "
                 "(Fill in the Blanks) · Written constructed-response (Short Answer, Long Answer, Essay).")
     st.markdown("**Author:** Karma Dorji · " + EMAIL)
-    st.info(t("privacy"))
 
 
 def how_it_works():
@@ -29,7 +28,6 @@ def how_it_works():
         "Read the decision and the reason for every item.", "Download CSV, Excel or PDF.",
         "Optionally open **Test Distribution** for descriptive statistics, t-tests and z-tests."], 1):
         st.markdown(f"**{i}.** {s}")
-    st.info(t("privacy"))
 
 
 def item_guide():
