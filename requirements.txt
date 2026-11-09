@@ -1,0 +1,9 @@
+streamlit>=1.55
+pandas
+numpy
+scipy
+openpyxl
+altair
+reportlab
+matplotlib
+pytest
