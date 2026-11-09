@@ -25,7 +25,6 @@ def render_upload(sanitize):
     c2.download_button("⬇️ Excel template", TEMPLATE.read_bytes(), "MCQ_Template.xlsx",
                        "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
                        key="mcq_combined_template", width="stretch")
-    st.caption(t("privacy"))
 
     uploaded = st.file_uploader("Upload .xlsx", type=["xlsx"], key="mcq_combined_upload",
                                 help="One completed MCQ workbook, up to 10 MB.")
