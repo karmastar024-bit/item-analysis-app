@@ -7,12 +7,38 @@ MENU_KEYS = ["home", "about", "how", "guide", "rules", "stat_tests",
              "data_format", "samples", "methodology", "contact", "feedback"]
 
 CSS = """<style>
-.block-container{padding-top:1.4rem;max-width:1180px}
-.ia-title{font-size:30px;font-weight:800;letter-spacing:.04em;color:#1F3A5F;margin:0;line-height:1.1}
-.ia-sub{color:#5B6678;font-size:15px;margin:2px 0 0 0}
+.block-container{padding-top:4.5rem;max-width:1180px}
+.ia-title{font-size:30px;font-weight:800;letter-spacing:.04em;color:var(--text-color);margin:0;line-height:1.1}
+.ia-sub{color:var(--text-color);opacity:.72;font-size:15px;margin:2px 0 0 0}
 .ia-card{border:1px solid #DCE3EC;border-radius:12px;padding:16px 18px;background:#fff}
 div[data-testid="stButton"]>button[kind="secondary"]{border-radius:12px}
 .ia-choice button{min-height:84px;font-size:18px;font-weight:600}
+
+.stApp {
+    background: radial-gradient(ellipse at 8% 10%, #5b9cf522, transparent 50%),
+                radial-gradient(ellipse at 92% 50%, #8a62d522, transparent 50%),
+                var(--background-color);
+}
+.ia-card, .ia-footer, [data-testid="stMetric"],
+[data-testid="stExpander"], [data-testid="stFileUploaderDropzone"],
+[data-testid="stForm"], [data-testid="stVegaLiteChart"] {
+    background: color-mix(in srgb, var(--secondary-background-color) 72%, transparent);
+    border: 1px solid color-mix(in srgb, var(--text-color) 14%, transparent);
+    border-radius: 18px;
+    box-shadow: inset 0 1px 0 #ffffff30, 0 8px 28px #1023440a;
+    backdrop-filter: blur(18px); -webkit-backdrop-filter: blur(18px);
+}
+.ia-footer, [data-testid="stMetric"] {padding: 18px;}
+[data-testid="stVegaLiteChart"] {padding: 12px;}
+[data-testid="stButton"] button, [data-testid="stDownloadButton"] button,
+[data-testid="stPopover"] button, [data-baseweb="input"], [data-baseweb="select"] > div,
+[data-baseweb="textarea"], [data-baseweb="tab-list"] {
+    border-radius: 12px;
+    background: color-mix(in srgb, var(--secondary-background-color) 80%, transparent);
+    box-shadow: inset 0 1px 0 #ffffff25;
+    backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px);
+}
+button:focus-visible {outline: 3px solid #6495ed; outline-offset: 3px;}
 </style>"""
 
 
