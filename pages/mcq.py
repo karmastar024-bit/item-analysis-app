@@ -21,676 +21,6 @@ from item_analyzer import ItemAnalyzer
 from report_extras import compute_score_distribution, create_pdf_report
 
 
-# ============================================================
-# PAGE CONFIGURATION
-# ============================================================
-
-# NOTE: st.set_page_config() now lives in the entry point (app.py).
-
-
-# ============================================================
-# CUSTOM CSS
-# ============================================================
-
-st.markdown(
-    """
-<style>
-
-@import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500;600&display=swap');
-
-html, body, [data-testid="stAppViewContainer"] {
-    background-color: #F3F5F8 !important;
-    color: #16233E !important;
-    font-family: 'Inter', sans-serif !important;
-}
-
-h1, h2, h3 {
-    font-family: 'Space Grotesk', sans-serif !important;
-}
-
-.header-box {
-    background-color: #16233E;
-    background-image:
-        linear-gradient(
-            rgba(255,255,255,0.04) 1px,
-            transparent 1px
-        ),
-        linear-gradient(
-            90deg,
-            rgba(255,255,255,0.04) 1px,
-            transparent 1px
-        );
-
-    background-size: 20px 20px;
-
-    padding: 30px;
-
-    border-radius: 14px;
-
-    color: #FFFFFF;
-
-    margin-bottom: 25px;
-}
-
-.badge-base {
-    display: inline-block;
-    padding: 4px 12px;
-    border-radius: 20px;
-    font-size: 11px;
-    font-weight: 700;
-    text-transform: uppercase;
-}
-
-.badge-retain {
-    background-color: #E3F3EA;
-    color: #2F8F5B;
-}
-
-.badge-review {
-    background-color: #FBF0DE;
-    color: #C9862B;
-}
-
-.badge-revise {
-    background-color: #FAEAE2;
-    color: #BD5B34;
-}
-
-.badge-discard {
-    background-color: #FAE7E5;
-    color: #B23A32;
-}
-
-.dist-container {
-    display: flex;
-    width: 100%;
-    height: 30px;
-    border-radius: 6px;
-    overflow: hidden;
-    margin: 10px 0;
-    border: 1px solid #DEE4EF;
-}
-
-.dist-segment {
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    color: white;
-    font-family: monospace;
-    font-size: 11px;
-    font-weight: bold;
-}
-
-.report-title {
-    font-size: 18px;
-    font-weight: 700;
-    color: #16233E;
-}
-
-.small-muted {
-    font-size: 12px;
-    color: #65728A;
-}
-
-.template-card {
-    background-color: #FFFFFF;
-    border: 1px solid #DEE4EF;
-    border-radius: 12px;
-    padding: 18px 20px;
-    margin-bottom: 10px;
-}
-
-.template-card-title {
-    font-size: 14px;
-    font-weight: 700;
-    color: #16233E;
-    margin-bottom: 6px;
-}
-
-.template-card-body {
-    font-size: 13px;
-    color: #4B5875;
-    line-height: 1.5;
-}
-
-.template-required-badge {
-    display: inline-block;
-    background-color: #E6F1FB;
-    color: #185FA5;
-    font-size: 10px;
-    font-weight: 700;
-    text-transform: uppercase;
-    padding: 3px 10px;
-    border-radius: 20px;
-    margin-left: 8px;
-}
-
-.template-error-card {
-    background-color: #FAE7E5;
-    border: 1px solid #F0C4BE;
-    border-radius: 12px;
-    padding: 16px 20px;
-    margin: 10px 0;
-}
-
-.template-error-title {
-    font-size: 14px;
-    font-weight: 700;
-    color: #B23A32;
-    margin-bottom: 4px;
-}
-
-.template-error-body {
-    font-size: 13px;
-    color: #7A2A22;
-    line-height: 1.5;
-    white-space: pre-line;
-}
-
-.metric-info-card {
-    background-color: #FFFFFF;
-    border: 1px solid #E4E9F2;
-    border-top: 4px solid var(--accent-color, #185FA5);
-    border-radius: 14px;
-    padding: 22px 22px 20px 22px;
-    height: 100%;
-    box-shadow: 0 2px 10px rgba(22, 35, 62, 0.04);
-    transition: box-shadow 0.15s ease;
-}
-
-.metric-info-header {
-    display: flex;
-    align-items: center;
-    gap: 10px;
-    margin-bottom: 14px;
-}
-
-.metric-info-icon {
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    width: 34px;
-    height: 34px;
-    min-width: 34px;
-    border-radius: 10px;
-    font-size: 16px;
-    background-color: var(--accent-bg, #E6F1FB);
-}
-
-.metric-info-title {
-    font-family: 'Space Grotesk', sans-serif;
-    font-size: 15.5px;
-    font-weight: 700;
-    color: #16233E;
-    letter-spacing: -0.01em;
-}
-
-.metric-info-formula {
-    font-family: 'JetBrains Mono', monospace;
-    font-size: 12.5px;
-    font-weight: 500;
-    background-color: #F6F8FC;
-    border: 1px solid #E4E9F2;
-    border-left: 3px solid var(--accent-color, #185FA5);
-    border-radius: 8px;
-    padding: 12px 14px;
-    color: #1E2D4E;
-    margin-bottom: 14px;
-    line-height: 1.6;
-    white-space: pre-wrap;
-}
-
-.metric-info-body {
-    font-family: 'Inter', sans-serif;
-    font-size: 13.5px;
-    font-weight: 400;
-    color: #4B5875;
-    line-height: 1.65;
-    margin-bottom: 14px;
-}
-
-.metric-info-thresholds {
-    font-family: 'Inter', sans-serif;
-    font-size: 12.5px;
-    color: #4B5875;
-    display: flex;
-    flex-direction: column;
-    gap: 6px;
-    padding-top: 12px;
-    border-top: 1px dashed #E4E9F2;
-}
-
-.metric-info-thresholds .row {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-}
-
-.metric-info-thresholds code {
-    font-family: 'JetBrains Mono', monospace;
-    font-size: 11.5px;
-    font-weight: 600;
-    background-color: var(--accent-bg, #EEF2F9);
-    color: var(--accent-color, #185FA5);
-    padding: 3px 8px;
-    border-radius: 20px;
-    white-space: nowrap;
-}
-
-/* Force the three metric cards (and every nested Streamlit
-   wrapper div in between) to stretch to one shared height, with
-   the body copy growing to push each card's threshold list to
-   the same bottom line regardless of text length. Descendant
-   selectors (not direct-child) are used deliberately, since
-   Streamlit nests several unnamed wrapper divs between the
-   column and the actual markdown content. */
-
-div[data-testid="stHorizontalBlock"]:has(.metric-info-card) {
-    align-items: stretch;
-}
-
-div[data-testid="stHorizontalBlock"]:has(.metric-info-card)
-    [data-testid="column"] {
-    display: flex;
-    height: 100%;
-}
-
-div[data-testid="stHorizontalBlock"]:has(.metric-info-card)
-    [data-testid="stVerticalBlockBorderWrapper"],
-div[data-testid="stHorizontalBlock"]:has(.metric-info-card)
-    [data-testid="stVerticalBlock"],
-div[data-testid="stHorizontalBlock"]:has(.metric-info-card)
-    [data-testid="element-container"],
-div[data-testid="stHorizontalBlock"]:has(.metric-info-card)
-    [data-testid="stMarkdown"],
-div[data-testid="stHorizontalBlock"]:has(.metric-info-card)
-    [data-testid="stMarkdownContainer"] {
-    width: 100%;
-    height: 100%;
-    display: flex;
-    flex-direction: column;
-    flex: 1 1 auto;
-}
-
-.metric-info-card {
-    display: flex;
-    flex-direction: column;
-    flex: 1 1 auto;
-    height: 100%;
-}
-
-.metric-info-body {
-    flex: 1 1 auto;
-}
-
-/* Application shell and educational dashboard polish */
-[data-testid="stAppViewContainer"] {
-    background:
-        radial-gradient(circle at 8% -8%, rgba(50, 118, 130, 0.10), transparent 29rem),
-        radial-gradient(circle at 98% 8%, rgba(218, 163, 73, 0.10), transparent 24rem),
-        #F7F8F5 !important;
-}
-
-[data-testid="stHeader"] {
-    background: rgba(247, 248, 245, 0.82);
-    backdrop-filter: blur(12px);
-}
-
-.block-container {
-    max-width: 1240px;
-    padding-top: 2.5rem;
-    padding-bottom: 4rem;
-}
-
-h1, h2, h3 {
-    color: #173B3F !important;
-    letter-spacing: -0.03em;
-}
-
-.header-box {
-    position: relative;
-    overflow: hidden;
-    background: linear-gradient(120deg, #173B3F, #1A5353);
-    border: 1px solid rgba(255,255,255,0.13);
-    border-radius: 22px;
-    padding: 42px 46px;
-    box-shadow: 0 18px 42px rgba(20, 54, 57, 0.18);
-    margin-bottom: 30px;
-}
-
-.header-box::after {
-    content: "";
-    position: absolute;
-    width: 340px;
-    height: 340px;
-    border: 1px solid rgba(248, 209, 130, 0.35);
-    border-radius: 50%;
-    right: -110px;
-    top: -155px;
-    box-shadow: 0 0 0 42px rgba(248, 209, 130, 0.06),
-                0 0 0 84px rgba(248, 209, 130, 0.04);
-}
-
-.header-content { position: relative; z-index: 1; max-width: 720px; }
-
-.eyebrow {
-    color: #F8D182;
-    font-family: 'JetBrains Mono', monospace;
-    font-size: 10px;
-    font-weight: 600;
-    letter-spacing: 0.13em;
-    text-transform: uppercase;
-}
-
-.hero-title {
-    color: #FFFFFF !important;
-    font-size: clamp(2rem, 4vw, 3.05rem);
-    line-height: 1.08;
-    margin: 12px 0 13px;
-}
-
-.hero-copy { color: #D7E7E2; font-size: 15px; line-height: 1.7; margin: 0; }
-
-.section-intro { margin: 34px 0 16px; }
-.section-kicker {
-    color: #A4641A;
-    font-family: 'JetBrains Mono', monospace;
-    font-size: 10px;
-    font-weight: 600;
-    letter-spacing: 0.12em;
-    text-transform: uppercase;
-    margin-bottom: 5px;
-}
-.section-title {
-    color: #173B3F;
-    font-family: 'Space Grotesk', sans-serif;
-    font-size: 1.55rem;
-    font-weight: 700;
-    letter-spacing: -0.025em;
-    margin: 0;
-}
-.section-copy { color: #617477; font-size: 13.5px; line-height: 1.55; margin: 5px 0 0; }
-
-.workflow-steps {
-    display: grid;
-    grid-template-columns: repeat(3, 1fr);
-    gap: 10px;
-    margin: 18px 0 16px;
-}
-.workflow-step {
-    display: flex;
-    align-items: center;
-    gap: 10px;
-    padding: 12px 14px;
-    background: #FFFFFF;
-    border: 1px solid #DCE7E2;
-    border-radius: 12px;
-    color: #52666A;
-    font-size: 12.5px;
-}
-.workflow-step span {
-    display: grid;
-    place-items: center;
-    width: 23px;
-    height: 23px;
-    border-radius: 50%;
-    background: #E5F1EC;
-    color: #176B5A;
-    font-family: 'JetBrains Mono', monospace;
-    font-size: 11px;
-    font-weight: 700;
-}
-.upload-panel-title {
-    color: #173B3F;
-    font-family: 'Space Grotesk', sans-serif;
-    font-weight: 700;
-    font-size: 15px;
-    margin-bottom: 7px;
-}
-
-[data-testid="stButton"] > button,
-[data-testid="stDownloadButton"] > button {
-    min-height: 2.75rem;
-    border-radius: 10px;
-    font-weight: 600;
-    transition: transform 0.15s ease, box-shadow 0.15s ease;
-}
-[data-testid="stButton"] > button[kind="primary"],
-[data-testid="stDownloadButton"] > button[kind="primary"] {
-    background: #176B5A;
-    border-color: #176B5A;
-}
-[data-testid="stButton"] > button:hover,
-[data-testid="stDownloadButton"] > button:hover {
-    transform: translateY(-1px);
-    box-shadow: 0 7px 14px rgba(23, 107, 90, 0.16);
-}
-[data-testid="stMetric"] {
-    background: #FFFFFF;
-    border: 1px solid #DCE7E2;
-    border-radius: 14px;
-    padding: 16px 18px;
-    box-shadow: 0 2px 8px rgba(23, 59, 63, 0.035);
-}
-[data-testid="stMetricLabel"] { color: #617477; font-size: 12px; font-weight: 600; }
-[data-testid="stMetricValue"] { color: #173B3F; font-family: 'Space Grotesk', sans-serif; }
-[data-testid="stExpander"] {
-    background: #FFFFFF;
-    border: 1px solid #DCE7E2;
-    border-radius: 13px;
-    overflow: hidden;
-    margin-bottom: 9px;
-}
-[data-testid="stExpander"] summary { padding: 5px 4px; font-weight: 650; color: #173B3F; }
-[data-testid="stDataFrame"] { border: 1px solid #DCE7E2; border-radius: 12px; overflow: hidden; }
-
-/* Equal-height methodology cards and textbook-style formula notation. */
-.metric-card-grid {
-    display: grid;
-    grid-template-columns: repeat(3, minmax(0, 1fr));
-    gap: 22px;
-    align-items: stretch;
-}
-.metric-card-grid .metric-info-card {
-    min-height: 510px;
-}
-.formula-label {
-    color: #173B3F;
-    font-family: 'JetBrains Mono', monospace;
-    font-size: 12px;
-    font-weight: 700;
-    margin-bottom: 8px;
-}
-.formula-expression {
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    gap: 8px;
-    color: #173B3F;
-    font-family: 'JetBrains Mono', monospace;
-    font-size: 11.5px;
-    font-weight: 600;
-    line-height: 1.35;
-    text-align: center;
-}
-.formula-fraction {
-    display: inline-grid;
-    grid-template-rows: auto auto;
-    min-width: 130px;
-    vertical-align: middle;
-}
-.formula-fraction > span:first-child {
-    border-bottom: 1.5px solid currentColor;
-    padding: 0 5px 4px;
-}
-.formula-fraction > span:last-child { padding: 4px 5px 0; }
-.formula-operator { font-size: 18px; line-height: 1; }
-.decision-guide {
-    margin: 24px 0 10px;
-    padding: 22px;
-    background: #FFFFFF;
-    border: 1px solid #DCE7E2;
-    border-radius: 14px;
-    box-shadow: 0 2px 10px rgba(22, 35, 62, 0.04);
-}
-.decision-guide-title { color: #173B3F; font-family: 'Space Grotesk', sans-serif; font-size: 18px; font-weight: 700; margin: 0 0 6px; }
-.decision-guide-copy { color: #52666A; font-size: 13px; line-height: 1.55; margin: 0 0 16px; }
-.decision-rules { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; }
-.decision-rule { border-radius: 10px; padding: 13px; border: 1px solid #E4E9F2; }
-.decision-rule strong { display: block; font-size: 12px; letter-spacing: .04em; margin-bottom: 6px; }
-.decision-rule span { color: #4B5875; font-size: 12px; line-height: 1.45; }
-.decision-discard { background: #FEF3F2; border-color: #FECACA; }.decision-discard strong { color: #B42318; }
-.decision-revise { background: #FFF7ED; border-color: #FED7AA; }.decision-revise strong { color: #B54708; }
-.decision-review { background: #FFFAEB; border-color: #FDE68A; }.decision-review strong { color: #9A6700; }
-.decision-retain { background: #ECFDF3; border-color: #ABEFC6; }.decision-retain strong { color: #027A48; }
-.download-callout {
-    background: linear-gradient(115deg, #E7F3EE, #F9FCF9);
-    border: 1px solid #C6E0D4;
-    border-left: 5px solid #176B5A;
-    border-radius: 14px;
-    padding: 18px 20px;
-    margin: 16px 0 10px;
-}
-.download-callout strong {
-    display: block;
-    color: #173B3F;
-    font-family: 'Space Grotesk', sans-serif;
-    font-size: 16px;
-    margin-bottom: 4px;
-}
-.download-callout span { color: #52666A; font-size: 13px; line-height: 1.5; }
-
-@media (max-width: 700px) {
-    .block-container { padding-top: 1.2rem; }
-    .header-box { padding: 30px 25px; border-radius: 17px; }
-    .workflow-steps { grid-template-columns: 1fr; }
-    .metric-card-grid { grid-template-columns: 1fr; }
-    .decision-rules { grid-template-columns: 1fr; }
-    .metric-card-grid .metric-info-card { min-height: 0; }
-}
-
-</style>
-""",
-    unsafe_allow_html=True
-)
-
-
-# ============================================================
-# HEADER
-# ============================================================
-
-st.html(
-    """
-<div class="header-box">
-    <div class="header-content">
-        <div class="eyebrow">Item Analysis</div>
-        <h1 class="hero-title">Make every question a better teaching decision.</h1>
-        <p class="hero-copy">
-            Upload an answer key and student responses to turn classroom
-            results into practical evidence: which items to retain, review,
-            revise, or remove.
-        </p>
-    </div>
-</div>
-"""
-)
-
-
-# ============================================================
-# METRIC METHODOLOGY (how the numbers are computed)
-# ============================================================
-#
-# Shown up front, before the upload step, so users know exactly
-# what the Difficulty Index, Discrimination Index, and Distractor
-# Efficiency numbers mean before they see them on the dashboard.
-# These formulas mirror item_analyzer.py exactly.
-
-st.markdown(
-    """
-<div class="section-intro">
-    <div class="section-kicker">Before you begin</div>
-    <div class="section-title">Understand the evidence behind each item</div>
-    <p class="section-copy">Three measures help you distinguish questions
-    that are working well from those that need attention.</p>
-</div>
-""",
-    unsafe_allow_html=True
-)
-
-st.markdown(
-    """
-<div class="metric-card-grid">
-  <div class="metric-info-card" style="--accent-color:#185FA5; --accent-bg:#E6F1FB;">
-    <div class="metric-info-header"><div class="metric-info-icon">🎯</div><div class="metric-info-title">Difficulty Index</div></div>
-    <div class="metric-info-formula">
-      <div class="formula-label">Difficulty</div>
-      <div class="formula-expression"><div class="formula-fraction"><span>Correct responses</span><span>Total students</span></div></div>
-    </div>
-    <div class="metric-info-body">The share of students who answered the item correctly, from 0 to 1. Higher values indicate an easier item; lower values indicate a harder item.</div>
-    <div class="metric-info-thresholds">
-      <div class="row"><code>&lt; 0.20</code> Very difficult</div>
-      <div class="row"><code>0.20 – 0.80</code> Ideal</div>
-      <div class="row"><code>&gt; 0.80</code> Too easy</div>
-    </div>
-  </div>
-  <div class="metric-info-card" style="--accent-color:#8A4FBE; --accent-bg:#F1E9FA;">
-    <div class="metric-info-header"><div class="metric-info-icon">📈</div><div class="metric-info-title">Discrimination Index</div></div>
-    <div class="metric-info-formula">
-      <div class="formula-label">Top-group success − bottom-group success</div>
-      <div class="formula-expression">
-        <div class="formula-fraction"><span>Correct in top 27%</span><span>n</span></div>
-        <span class="formula-operator">−</span>
-        <div class="formula-fraction"><span>Correct in bottom 27%</span><span>n</span></div>
-      </div>
-    </div>
-    <div class="metric-info-body">Compares the top-scoring and bottom-scoring 27% of students. It shows how well an item separates stronger students from weaker ones, on a scale of −1 to 1.</div>
-    <div class="metric-info-thresholds">
-      <div class="row"><code>&lt; 0</code> Negative</div>
-      <div class="row"><code>0.00 – 0.19</code> Poor</div>
-      <div class="row"><code>0.20 – 0.29</code> Fair</div>
-      <div class="row"><code>≥ 0.30</code> Good</div>
-    </div>
-  </div>
-  <div class="metric-info-card" style="--accent-color:#2F8F5B; --accent-bg:#E3F3EA;">
-    <div class="metric-info-header"><div class="metric-info-icon">🧩</div><div class="metric-info-title">Distractor Efficiency</div></div>
-    <div class="metric-info-formula">
-      <div class="formula-label">Efficiency</div>
-      <div class="formula-expression"><div class="formula-fraction"><span>Functional distractors</span><span>Total distractors</span></div><span class="formula-operator">× 100%</span></div>
-    </div>
-    <div class="metric-info-body">Each wrong option is checked for use. A distractor selected by at least 5% of students is functional; options selected by fewer than 5% are flagged for review.</div>
-    <div class="metric-info-thresholds">
-      <div class="row"><code>≥ 5%</code> selected → Functional</div>
-      <div class="row"><code>&lt; 5%</code> selected → Non-functional (flagged)</div>
-    </div>
-  </div>
-</div>
-""",
-    unsafe_allow_html=True
-)
-
-st.markdown(
-    """
-<section class="decision-guide" aria-label="Item recommendation rules">
-  <h2 class="decision-guide-title">How the item recommendation is decided</h2>
-  <p class="decision-guide-copy">The app evaluates the unrounded difficulty and discrimination values in this order. Distractor efficiency is reported separately and does not change the final recommendation.</p>
-  <div class="decision-rules">
-    <div class="decision-rule decision-discard"><strong>DISCARD</strong><span>Discrimination is below <code>0</code>.</span></div>
-    <div class="decision-rule decision-revise"><strong>REVISE</strong><span>Discrimination is below <code>0.20</code> <em>and</em> difficulty is below <code>0.20</code> or above <code>0.80</code>.</span></div>
-    <div class="decision-rule decision-review"><strong>REVIEW</strong><span>Discrimination is below <code>0.20</code>, or difficulty is below <code>0.20</code> or above <code>0.80</code>.</span></div>
-    <div class="decision-rule decision-retain"><strong>RETAIN</strong><span>All remaining items: discrimination is at least <code>0.20</code> and difficulty is from <code>0.20</code> through <code>0.80</code>, inclusive.</span></div>
-  </div>
-</section>
-""",
-    unsafe_allow_html=True,
-)
-
-st.markdown("")
-
-
-# ============================================================
-# HELPER FUNCTIONS
-# ============================================================
-
 def sanitize(data):
     """
     Convert dataclasses and Enum values into JSON/Streamlit-safe
@@ -1586,17 +916,6 @@ def create_excel_report(results):
     return output.getvalue()
 
 
-# ============================================================
-# FILE UPLOAD (centered popup, template-guided)
-# ============================================================
-#
-# Each slot shows a single upload button. Clicking it opens a
-# centered modal popup (st.dialog) that strictly explains the
-# required template, offers the sample download, and only lets
-# the user proceed once a file has been chosen. Nothing about
-# the format is buried inline in the page — it's front-and-center
-# in the popup every time.
-
 from components.mcq_upload import render_upload
 
 render_upload(sanitize)
@@ -1610,6 +929,59 @@ if (
     "analysis_results"
     in st.session_state
 ):
+
+    st.divider()
+    st.subheader("Results")
+    st.markdown("""
+<style>.badge-base {
+    display: inline-block;
+    padding: 4px 12px;
+    border-radius: 20px;
+    font-size: 11px;
+    font-weight: 700;
+    text-transform: uppercase;
+}
+
+.badge-retain {
+    background-color: #E3F3EA;
+    color: #2F8F5B;
+}
+
+.badge-review {
+    background-color: #FBF0DE;
+    color: #C9862B;
+}
+
+.badge-revise {
+    background-color: #FAEAE2;
+    color: #BD5B34;
+}
+
+.badge-discard {
+    background-color: #FAE7E5;
+    color: #B23A32;
+}
+
+.dist-container {
+    display: flex;
+    width: 100%;
+    height: 30px;
+    border-radius: 6px;
+    overflow: hidden;
+    margin: 10px 0;
+    border: 1px solid #DEE4EF;
+}
+
+.dist-segment {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: white;
+    font-family: monospace;
+    font-size: 11px;
+    font-weight: bold;
+}</style>
+""", unsafe_allow_html=True)
 
     results = st.session_state[
         "analysis_results"
@@ -1625,17 +997,7 @@ if (
         {}
     )
 
-    st.markdown(
-        """
-<div class="section-intro">
-    <div class="section-kicker">Assessment overview</div>
-    <div class="section-title">Your cohort at a glance</div>
-    <p class="section-copy">Start here for a quick picture of participation,
-    score spread, and overall performance.</p>
-</div>
-""",
-        unsafe_allow_html=True
-    )
+    st.subheader('Your cohort at a glance')
 
     metric_col1, metric_col2, metric_col3 = st.columns(3)
 
@@ -1721,17 +1083,7 @@ if (
 
     st.markdown("---")
 
-    st.markdown(
-        """
-<div class="section-intro">
-    <div class="section-kicker">Score spread</div>
-    <div class="section-title">Score distribution</div>
-    <p class="section-copy">How many students reached each score. Use it
-    to see whether the test was too easy, too hard, or well balanced.</p>
-</div>
-""",
-        unsafe_allow_html=True
-    )
+    st.subheader('Score distribution')
 
     distribution = compute_score_distribution(results)
 
@@ -1783,15 +1135,7 @@ if (
 
     st.markdown("---")
 
-    st.markdown(
-        """
-<div class="section-intro">
-    <div class="section-kicker">Question review</div>
-    <div class="section-title">Item-by-item analysis</div>
-</div>
-""",
-        unsafe_allow_html=True
-    )
+    st.subheader('Item-by-item analysis')
 
     st.caption(
         "Each question is evaluated individually for difficulty, "
@@ -2406,15 +1750,7 @@ if (
 
     st.markdown("---")
 
-    st.markdown(
-        """
-<div class="section-intro">
-    <div class="section-kicker">Teaching actions</div>
-    <div class="section-title">Item recommendation summary</div>
-</div>
-""",
-        unsafe_allow_html=True
-    )
+    st.subheader('Item recommendation summary')
 
     recommendation_rows = []
 
@@ -2487,20 +1823,7 @@ if (
 
     st.markdown("---")
 
-    st.markdown(
-        """
-<div class="section-intro">
-    <div class="section-kicker">Shareable record</div>
-    <div class="section-title">Download the complete report</div>
-</div>
-<div class="download-callout">
-    <strong>Your report is ready to share.</strong>
-    <span>Download the Excel workbook for item-level findings, option
-    breakdowns, and the overall summary with your examination information.</span>
-</div>
-""",
-        unsafe_allow_html=True
-    )
+    st.subheader('Download the complete report')
 
     report_bytes = create_excel_report(
         results
@@ -2540,12 +1863,3 @@ if (
     )
 
 
-# ============================================================
-# UPLOAD REMINDER
-# ============================================================
-
-else:
-
-    st.info(
-        "Upload your completed MCQ workbook above to see the analysis dashboard."
-    )
