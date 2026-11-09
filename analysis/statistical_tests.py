@@ -178,5 +178,9 @@ def descriptive(x):
     return {"N": len(x), "Mean": float(x.mean()), "Median": float(np.median(x)),
             "Mode": mode_txt, "Minimum": float(x.min()), "Maximum": float(x.max()),
             "Range": float(np.ptp(x)),
+            "Lower quartile (Q1)": float(np.percentile(x, 25)),
+            "Upper quartile (Q3)": float(np.percentile(x, 75)),
+            "Interquartile range": float(np.percentile(x, 75) - np.percentile(x, 25)),
+            "Standard error": float(x.std(ddof=1) / np.sqrt(len(x))) if len(x) > 1 else float("nan"),
             "Variance (sample)": float(x.var(ddof=1)) if len(x) > 1 else float("nan"),
             "Std. deviation (sample)": float(x.std(ddof=1)) if len(x) > 1 else float("nan")}
